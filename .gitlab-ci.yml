@@ -6,11 +6,22 @@
 # Note that environment variables can be set in several places
 # See https://docs.gitlab.com/ee/ci/variables/#cicd-variable-precedence
 stages:
+- build
 - test
-- secret-detection
-variables:
-  SECRET_DETECTION_ENABLED: 'true'
-secret_detection:
-  stage: secret-detection
+- security
+- deploy
+build_placeholder:
+  stage: build
+  image: node:20
+  script:
+    - echo "Build stage placeholder"
+cicd_alive_check:
+  stage: test
+  image: node:20
+  script:
+  - echo "CI is alive"
+  - node --version
+
+
 include:
 - template: Security/Secret-Detection.gitlab-ci.yml
