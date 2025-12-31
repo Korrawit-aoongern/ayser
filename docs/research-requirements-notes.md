@@ -40,3 +40,18 @@ Ayser ถูกออกแบบให้เป็น
 
 **แหล่งที่มา** : [What are the requirements for an application health monitoring system? - Stack Overflow](https://stackoverflow.com/questions/79415/what-are-the-requirements-for-an-application-health-monitoring-system)
 
+
+## Out of Scope (Current Phase)
+
+ในเฟสปัจจุบัน Ayser **ยังไม่ครอบคลุม** ขอบเขตต่อไปนี้ เพื่อรักษาความเรียบง่ายของระบบ
+และโฟกัสไปที่การประเมินสุขภาพระบบในระดับพื้นฐาน
+
+- ระบบแจ้งเตือน (Alert) แบบ real-time  
+  > ปัจจุบันรองรับเพียงการแจ้งเตือนพื้นฐานที่ไม่ใช่ real-time
+
+- การเชื่อมต่อ Cloud Provider ผ่าน OAuth  
+  รวมถึงการรองรับ URL และโครงสร้าง API แบบ custom สำหรับ Cloud Provider เฉพาะราย
+
+- Real-time Dashboard ที่ใช้ WebSocket หรือเทคโนโลยีใกล้เคียง  
+  > Dashboard ในเฟสนี้เน้นการแสดงผลสถานะ ณ เวลาปัจจุบันแบบไม่ต่อเนื่อง (non-streaming)
+
