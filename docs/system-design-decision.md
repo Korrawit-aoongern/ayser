@@ -1,61 +1,63 @@
 # System Design Decisions
+## `* Subject Can be change`
+## Frontend
+ - SvelteKit
 
-## Why Ayser Uses Machine Learning?
+## Backend
+ - FastAPI
 
-Ayser ถูกออกแบบมาเพื่อเป็น Website & Service Health Advisor
-ไม่ใช่ analytics platform หรือ business intelligence system
+## Database
+ - Supabase
 
-เป้าหมายหลักของระบบคือ
-การช่วยให้ผู้ใช้งานเข้าใจว่า “ขณะนี้ระบบอยู่ในสภาพใด”
-และ “ควรกังวลหรือไม่” โดยไม่ต้องตีความ metric จำนวนมากด้วยตนเอง
+## ML
+ - ?
+ - ML Role: anomaly scoring / pattern summarization
 
-Machine Learning ถูกนำมาใช้ใน Ayser ด้วยเหตุผลดังนี้:
+## Security (Static & Pipeline-Level)
+ - SonarQube
+ - Gitlab-Secret detection
 
-### 1. ลดภาระการตีความข้อมูลของผู้ใช้งาน
+## Testing
+### Logic-Level / Unit Testing
+ - ? (framework to be selected)
+### API / Integration Testing
+ - ? (contract & integration focus)
 
-ผู้ใช้งานจำนวนมากไม่ใช่ผู้เชี่ยวชาญด้าน DevOps
-การแสดง metric ดิบจำนวนมากอาจทำให้เกิดความสับสนมากกว่าประโยชน์
 
-ML ช่วยแปลงข้อมูลหลายตัว
-ให้กลายเป็นสถานะสุขภาพระดับสูง เช่น
-- Normal
-- Warning
-- Degraded
-- Critical
+# Infra
 
-### 2. รองรับ baseline ของระบบที่แตกต่างกัน
+## Networking
+### API & Communication
+ - RESTful API
+ - JSON over HTTPS
+### Authentication & Authorization
+ - Supabase Auth (JWT-based)
 
-แต่ละ service มีพฤติกรรม “ปกติ” ที่ไม่เหมือนกัน
-การใช้ threshold แบบตายตัวอาจทำให้เกิด false alert
+## Observability
+### Monitoring
+ - Prometheus (Local)
 
-ML ช่วยเรียนรู้ baseline ของแต่ละระบบ
-และใช้ baseline นั้นในการประเมินความผิดปกติ
-แทนการใช้ค่าคงที่เดียวกับทุก service
+## Architecture Style
+- ? (leaning towards modular monolith)
+## Repository
+ - Gitlab
+ - Github
+## CI/CD Pipeline
+ - Gitlab
+## Containerization
+- Docker + Compose
+## Deployment Target
+    Frontend App = Vercel (candidate)
+    Backend App =   Cloudflare Workers (candidate)
+                    AWS Lambda (alternative)
+                    Render.io (alternative)
+                    Railway (alternative)
+    ML Service = TBD (batch / async inference)
+    Database = Supabase (managed PostgreSQL)
 
-### 3. ช่วยระบุความผิดปกติแบบเรียบง่าย
+## Non-Functional Considerations
+- Performance
+- Scalability
+- Security
+- Maintainability
 
-ML ใน Ayser ไม่ได้มุ่งเน้น anomaly detection ขั้นสูง
-แต่เน้นการระบุความผิดปกติในระดับที่เข้าใจง่าย
-เพื่อเป็นสัญญาณเตือนให้ผู้ใช้งานตรวจสอบต่อ
-
-### 4. ให้คำแนะนำเชิงสนับสนุน (Advisory)
-
-ML สามารถช่วยเชื่อมโยงสัญญาณพื้นฐาน เช่น
-- latency สูงร่วมกับ CPU สูง
-- error rate เพิ่มขึ้นโดย latency คงที่
-
-เพื่อให้คำแนะนำเชิงนุ่มนวลเกี่ยวกับสาเหตุที่เป็นไปได้
-โดยไม่ตัดสินหรือดำเนินการแทนผู้ใช้งาน
-
-### สิ่งที่ Ayser ตั้งใจไม่ใช้ Machine Learning ทำ
-
-เพื่อควบคุมขอบเขตของระบบและลดความซับซ้อน
-Ayser จะไม่ใช้ ML สำหรับ:
-- การวิเคราะห์แนวโน้มระยะยาว
-- การวางแผน capacity
-- การวิเคราะห์พฤติกรรมผู้ใช้งาน
-- การตัดสินใจหรือแก้ไขระบบโดยอัตโนมัติ
-
-การตัดสินใจใช้ Machine Learning ใน Ayser
-เป็นการใช้ ML ในบทบาทของ “ผู้ช่วยแปลสัญญาณ”
-ไม่ใช่ระบบวิเคราะห์หรือควบคุมระบบแทนมนุษย์
