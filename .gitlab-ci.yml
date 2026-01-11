@@ -15,13 +15,15 @@ build_placeholder:
   image: node:20
   script:
     - echo "Build stage placeholder"
+  when: manual # Disable pipline run for now
 cicd_alive_check:
   stage: test
   image: node:20
   script:
   - echo "CI is alive"
   - node --version
-
+  when: manual # Disable pipline run for now
 
 include:
 - template: Security/Secret-Detection.gitlab-ci.yml
+
