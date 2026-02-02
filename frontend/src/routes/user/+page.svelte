@@ -34,6 +34,7 @@
           <input 
             type="email" 
             class="w-full px-4 py-2 border border-gray-300 rounded"
+            disabled
             bind:value={userData.email}
           />
         </div>
@@ -76,8 +77,8 @@
 
     <div class="mt-8">
       <h2 class="text-2xl font-bold mb-4">Services</h2>
-      <a href="/services" class="px-6 py-2 bg-gray-300 hover:bg-gray-400 rounded text-sm font-semibold inline-block">
-        Manage All Services
+      <a href="/services" class="px-6 py-2 text-red-500 border-red-500 border-2 hover:bg-red-500 hover:text-white rounded text-sm font-semibold inline-block">
+        Delete All Services
       </a>
     </div>
   </form>

@@ -1,12 +1,20 @@
 <script>
-  let formData = {
-    serviceName: 'Service 1',
-    url: 'https://example.com',
-  };
+    let formData = {
+        serviceName: 'Service 1',
+        url: 'https://example.com',
+        advancedMethod: 'None',
+    };
 
-  function handleSave() {
-    console.log('Saving service:', formData);
-    // Add save logic here
+    let advancedMethods = [
+        'None',
+        'Metrics endpoint',
+        'Cloud Provider OAuth',
+        'Custom Provider (Custom API)',
+    ];
+
+    function handleSave() {
+        console.log('Saving service:', formData);
+        // Add save logic here
   }
 </script>
 
@@ -30,6 +38,15 @@
         class="w-full px-4 py-2 border border-gray-300 rounded"
         bind:value={formData.url}
       />
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-semibold mb-2">Advanced Methods</label>
+      <select class="w-full px-4 py-2 border border-gray-400 rounded bg-white" bind:value={formData.advancedMethod}>
+        {#each advancedMethods as method}
+          <option value={method}>{method}</option>
+        {/each}
+      </select>
     </div>
 
     <button 

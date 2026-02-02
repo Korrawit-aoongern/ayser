@@ -44,13 +44,11 @@
 
     <div class="mb-6">
       <label class="block text-sm font-semibold mb-2">Advanced Methods</label>
-      <div class="space-y-2">
+      <select class="w-full px-4 py-2 border border-gray-400 rounded bg-white" bind:value={formData.advancedMethod}>
         {#each advancedMethods as method}
-          <select class="w-full px-4 py-2 border border-gray-400 rounded">
-            <option selected>{method}</option>
-          </select>
+          <option value={method}>{method}</option>
         {/each}
-      </div>
+      </select>
     </div>
 
     <button 
