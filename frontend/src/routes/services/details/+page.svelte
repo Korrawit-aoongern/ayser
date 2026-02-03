@@ -1,7 +1,9 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
   import { onMount, onDestroy } from 'svelte';
 
+  let serviceId: number = 1;
   let service = {
     name: "Example Service",
     status: "Running",
@@ -10,6 +12,36 @@
     lastCheck: "12 minutes ago",
     warnings: "3",
   };
+
+  $: if ($page.url.searchParams.get('id')) {
+    serviceId = parseInt($page.url.searchParams.get('id') || '1');
+    loadService(serviceId);
+  }
+
+  function loadService(id: number) {
+    const serviceData: Record<number, any> = {
+      1: {
+        name: 'Service 1',
+        status: 'Running',
+        health: '96.45%',
+        url: 'https://example.com',
+        lastCheck: '12 minutes ago',
+        warnings: '3',
+      },
+      2: {
+        name: 'Service 2 Healths',
+        status: 'Running',
+        health: '98.12%',
+        url: 'https://service2.example.com',
+        lastCheck: '5 minutes ago',
+        warnings: '1',
+      },
+    };
+    const data = serviceData[id];
+    if (data) {
+      service = { ...data };
+    }
+  }
 
   let narratives = [
     { type: 'INFO', time: '00:00', message: 'Service Started' },
@@ -43,7 +75,7 @@
 
   function openEdit() {
     showMenu = false;
-    goto('/services/details/edit');
+    goto(`/services/details/edit?id=${serviceId}`);
   }
 
   function confirmDelete() {
@@ -79,7 +111,7 @@
     <div class="flex justify-between items-start mb-6">
       <h1 class="text-4xl font-bold">[{service.name}] Health</h1>
       <div class="flex gap-4 items-start relative">
-        <button class="px-6 py-2 bg-gray-300 hover:bg-gray-400 rounded">Check</button>
+        <button class="px-6 py-2 bg-gray-300 hover:bg-gray-400 rounded-xl">Check</button>
 
         <!-- three-dot menu container -->
         <div class="relative">

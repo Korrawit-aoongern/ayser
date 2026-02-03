@@ -34,7 +34,6 @@
           <input 
             type="email" 
             class="w-full px-4 py-2 border border-gray-300 rounded"
-            disabled
             bind:value={userData.email}
           />
         </div>
