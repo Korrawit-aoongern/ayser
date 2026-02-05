@@ -33,3 +33,5 @@ models/
 # Infra / tooling
 terraform.tfstate
 terraform.tfstate.*
+
+schema.txt

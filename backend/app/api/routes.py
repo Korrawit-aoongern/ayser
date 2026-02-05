@@ -1,8 +1,11 @@
 from fastapi import APIRouter
-from services.health_service import get_health_status
+from .auth import router as auth_router
+from .services import router as services_router
+from .health import router as health_router
 
-router = APIRouter()
+router = APIRouter(prefix="/api")
 
-@router.get("/services/{service_id}/health")
-def service_health(service_id: str):
-    return get_health_status(service_id)
+# Include all route modules
+router.include_router(auth_router)
+router.include_router(services_router)
+router.include_router(health_router)
