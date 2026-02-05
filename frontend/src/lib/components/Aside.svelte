@@ -25,18 +25,18 @@
 				All Services
 			</a>
 			<a
-				href="/services/details"
+				href="/services/details?id=1"
 				class="block w-full rounded-xl px-4 py-3 text-sm text-center bg-gray-300 hover:bg-gray-400 {$page.url
-					.pathname === '/services/details'
+					.pathname === '/services/details' && $page.url.searchParams.get('id') === '1'
 					? 'bg-gray-400 font-bold'
 					: ''}"
 			>
 				Service 1
 			</a>
 			<a
-				href="/services/details"
+				href="/services/details?id=2"
 				class="block w-full rounded-xl px-4 py-3 text-sm text-center bg-gray-300 hover:bg-gray-400 {$page.url
-					.pathname === '/services/details'
+					.pathname === '/services/details' && $page.url.searchParams.get('id') === '2'
 					? 'bg-gray-400 font-bold'
 					: ''}"
 			>

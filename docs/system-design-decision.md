@@ -10,8 +10,11 @@
  - Supabase
 
 ## ML
- - ?
- - ML Role: anomaly scoring / pattern summarization
+- ML Role:
+  - Anomaly scoring
+  - Health pattern summarization
+- LLM:
+  - ChatGPT (for health explanation and advisory narrative)
 
 ## Security (Static & Pipeline-Level)
  - SonarQube
@@ -19,9 +22,9 @@
 
 ## Testing
 ### Logic-Level / Unit Testing
- - ? (framework to be selected)
+ - pytest
 ### API / Integration Testing
- - ? (contract & integration focus)
+ - OpenAPI (Swagger UI)
 
 
 # Infra
@@ -35,10 +38,15 @@
 
 ## Observability
 ### Monitoring
- - Prometheus (Local)
+- HTTP-based health checks
+  - Black-box monitoring (URL-based)
+  - Gray-box monitoring (URL + /metrics endpoint)
 
 ## Architecture Style
-- ? (leaning towards modular monolith)
+- Modular Monolith
+  - Clear separation by domain (auth, services, health, metrics)
+  - Single deployable backend service
+  - Designed to evolve into services if required
 ## Repository
  - Gitlab
  - Github
@@ -52,7 +60,7 @@
                     AWS Lambda (alternative)
                     Render.io (alternative)
                     Railway (alternative)
-    ML Service = TBD (batch / async inference)
+    ML Service = Backend-triggered batch or async inference
     Database = Supabase (managed PostgreSQL)
 
 ## Non-Functional Considerations
