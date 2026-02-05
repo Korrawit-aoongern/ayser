@@ -148,7 +148,7 @@
           <p class="text-2xl font-semibold mb-2">● {service.status}</p>
           <p class="text-lg font-bold">+ {service.health}</p>
           <p class="text-sm text-gray-600">Last Check: {service.lastCheck}</p>
-          <p class="text-sm text-gray-600">Warnings in last 24h: {service.warnings}</p>
+          <p class="text-sm text-gray-600">Warnings (last 24h): {service.warnings}</p>
           <input type="text" placeholder="URL: {service.url}" class="mt-4 w-full px-4 py-2 bg-gray-300 rounded" disabled />
           <p class="text-sm text-gray-600 mt-2">Monitoring Method: URL-based</p>
         </div>
