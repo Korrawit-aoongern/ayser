@@ -1,6 +1,29 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
+	import { PUBLIC_API_BASE_URL } from '$env/static/public';
     import AyserIcon from '../assets/Ayser-Icon.png';
+
+	async function logout(e : Event) {
+		e.preventDefault();
+		
+		try {
+			const res = await fetch(`${PUBLIC_API_BASE_URL}/api/auth/logout`, {
+				method: 'POST',
+				credentials: 'include',
+			});
+
+			if (res.ok) {
+				await goto('/services/auth/login');
+				alert('Logged out successfully');
+			} else {
+				alert('Logout failed');
+			}
+		} catch (error) {
+			console.error('Logout error:', error);
+			alert('Logout error');
+		}
+	}
 </script>
 
 <!-- Left Sidebar -->
@@ -80,6 +103,7 @@
 				</a>
 				<a
 					href="/services/auth/login"
+					on:click={logout}
 					class="block w-full rounded-xl px-4 py-3 text-sm text-center bg-gray-300 hover:bg-gray-400"
 				>
 					Logout

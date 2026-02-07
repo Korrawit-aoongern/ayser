@@ -1,45 +1,33 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-
+  import { PUBLIC_API_BASE_URL } from '$env/static/public';
+  
   let email = '';
   let password = '';
   let error = '';
   let loading = false;
 
-  async function handleLogin(e) {
+  async function handleLogin(e: Event) {
     e.preventDefault();
-    error = '';
     loading = true;
+    error = '';
 
-    try {
-      const res = await fetch('/services/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({ email, password })
-      });
+    const res = await fetch(`${PUBLIC_API_BASE_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email, password })
+    });
 
-      const data = await res.json();
+    const data = await res.json();
 
-      if (res.ok && data.success) {
-        // redirect to home
-        window.location.href = '/';
-        return;
-      }
-
-      error = data?.error || 'Login failed';
-    } catch (err) {
-      error = 'Network error';
-    } finally {
-      loading = false;
+    if (res.ok) {
+      window.location.href = '/';
+    } else {
+      error = data.detail || 'Login failed';
     }
-  }
 
-  onMount(() => {
-    // focus email field if desired
-    const el = document.querySelector('input[name=email]') as HTMLInputElement | null;
-    el?.focus();
-  });
+    loading = false;
+  }
 </script>
 
 <div class="flex items-center justify-center min-h-screen bg-gray-100">
