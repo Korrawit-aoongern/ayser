@@ -1,0 +1,42 @@
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.backend
+    container_name: ayser-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - JWT_SECRET=${JWT_SECRET}
+      - ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+      - APP_ENV=dev
+    volumes:
+      - ../backend/app:/app/app
+      - ../backend/.env:/app/.env
+    networks:
+      - ayser-network
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.frontend
+    container_name: ayser-frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ../frontend/src:/app/src
+      - ../frontend/static:/app/static
+      - ../frontend/svelte.config.js:/app/svelte.config.js
+      - ../frontend/tsconfig.json:/app/tsconfig.json
+      - ../frontend/vite.config.ts:/app/vite.config.ts
+    networks:
+      - ayser-network
+    environment:
+      - VITE_API_URL=http://localhost:8000/api
+      - PUBLIC_API_BASE_URL=http://localhost:8000
+
+networks:
+  ayser-network:
+    driver: bridge

@@ -1,4 +1,6 @@
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Response, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
 from pydantic import BaseModel, EmailStr
 from passlib.context import CryptContext
 import jwt
@@ -9,6 +11,7 @@ from dotenv import load_dotenv
 import hashlib
 
 load_dotenv()
+security = HTTPBearer()
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -46,6 +49,22 @@ def create_jwt(user_id: str):
         "exp": datetime.utcnow() + timedelta(minutes=JWT_EXPIRE_MIN)
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
+def require_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    token = credentials.credentials
+
+    try:
+        payload = jwt.decode(
+            token,
+            JWT_SECRET,
+            algorithms=[JWT_ALGO]
+        )
+        return payload["sub"]  # this is user_id
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
 # ---- Routes ----
 @router.post("/register")

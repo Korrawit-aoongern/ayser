@@ -2,66 +2,85 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { onMount, onDestroy } from 'svelte';
+  import { PUBLIC_API_BASE_URL } from '$env/static/public';
 
   let serviceId: number = 1;
   let service = {
-    name: "Example Service",
-    status: "Running",
-    health: "96.45%",
-    url: "https://example.com",
-    lastCheck: "12 minutes ago",
-    warnings: "3",
+    service_id: 0,
+    service_name: "Example Service",
+    service_url: "https://example.com",
+    check_type: "url",
+    created_at: new Date().toISOString(),
   };
+
+  let healthData: {
+    health_id: number | null;
+    service_id: number;
+    availability: string;
+    responsiveness: string | null;
+    reliability: string | null;
+    overall_score: number | null;
+    latency_ms: number | null;
+    http_status: number | null;
+    checked_at: string | null;
+  } = {
+    health_id: null,
+    service_id: 0,
+    availability: "Unknown",
+    responsiveness: null,
+    reliability: null,
+    overall_score: null,
+    latency_ms: null,
+    http_status: null,
+    checked_at: null,
+  };
+
+  let events: Array<{
+    event_id?: number;
+    service_id: number;
+    event_level: string;
+    event_message: string;
+    detected_at?: string;
+  }> = [];
+
+  let isLoading = false;
+  let error = "";
 
   $: if ($page.url.searchParams.get('id')) {
     serviceId = parseInt($page.url.searchParams.get('id') || '1');
     loadService(serviceId);
   }
 
-  function loadService(id: number) {
-    const serviceData: Record<number, any> = {
-      1: {
-        name: 'Service 1',
-        status: 'Running',
-        health: '96.45%',
-        url: 'https://example.com',
-        lastCheck: '12 minutes ago',
-        warnings: '3',
-      },
-      2: {
-        name: 'Service 2 Healths',
-        status: 'Running',
-        health: '98.12%',
-        url: 'https://service2.example.com',
-        lastCheck: '5 minutes ago',
-        warnings: '1',
-      },
-    };
-    const data = serviceData[id];
-    if (data) {
-      service = { ...data };
+  async function loadService(id: number) {
+    const token = localStorage.getItem('access_token');
+
+    try {
+      const res = await fetch(`${PUBLIC_API_BASE_URL}/api/health/services/${id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (!res.ok) throw new Error('Failed to load service');
+
+      const data = await res.json();
+      service = data.service;
+      healthData = data.health || {
+        health_id: null,
+        service_id: id,
+        availability: "Unknown",
+        responsiveness: null,
+        reliability: null,
+        overall_score: null,
+        latency_ms: null,
+        http_status: null,
+        checked_at: null,
+      };
+      events = data.events || [];
+    } catch (e) {
+      error = (e as Error).message;
     }
   }
-
-  let narratives = [
-    { type: 'INFO', time: '00:00', message: 'Service Started' },
-    { type: 'WARNING', time: '01:20', message: 'Latency exceeded 500ms => "Users may experience slowness. Check upstream dependency or recent deploys"' },
-    { type: 'ERROR', time: 'ERROR', message: '"Recommend to do something to fix the issue"' },
-  ];
-
-  let healthDetails = {
-    availability: 'Up, Down',
-    responsiveness: 'Fast / Slow',
-    reliability: 'Stable / Flaky',
-    cpu: '-',
-    memory: '-',
-    disk: '-',
-    network: '-',
-    errorRate: '-',
-    requestCount: '1000',
-    httpStatus: '200 OK',
-    latency: '24ms',
-  };
 
   // UI state for menu + modal
   let showMenu = false;
@@ -80,7 +99,6 @@
 
   function confirmDelete() {
     showMenu = false;
-    // small delay to allow menu to close visually if needed
     setTimeout(() => (showConfirm = true), 100);
   }
 
@@ -88,13 +106,23 @@
     showConfirm = false;
   }
 
-  function doDelete() {
+  async function doDelete() {
     showConfirm = false;
-    // simulate deletion then go back to list
-    goto('/services');
+    const token = localStorage.getItem('access_token');
+
+    try {
+      await fetch(`${PUBLIC_API_BASE_URL}/api/services/${serviceId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      goto('/services');
+    } catch (e) {
+      error = (e as Error).message;
+    }
   }
 
-  // click outside to close menu
   let _handler = (e: MouseEvent) => {
     const target = e.target as Node | null;
     if (showMenu && menuRef && menuButtonRef && target && !menuRef.contains(target) && !menuButtonRef.contains(target)) {
@@ -102,16 +130,81 @@
     }
   };
 
+  async function runCheck() {
+    const token = localStorage.getItem('access_token');
+    isLoading = true;
+    error = "";
+
+    try {
+      const res = await fetch(`${PUBLIC_API_BASE_URL}/api/health/services/${serviceId}/check`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (!res.ok) throw new Error('Health check failed');
+
+      const checkResult = await res.json();
+      
+      // Update health data with check result
+      healthData = {
+        health_id: checkResult.health_id,
+        service_id: checkResult.service_id,
+        availability: checkResult.availability,
+        responsiveness: checkResult.responsiveness,
+        reliability: checkResult.reliability,
+        overall_score: checkResult.overall_score,
+        latency_ms: checkResult.latency_ms,
+        http_status: checkResult.http_status,
+        checked_at: checkResult.checked_at,
+      };
+
+      // Reload service data to get new events
+      await loadService(serviceId);
+    } catch (e) {
+      error = (e as Error).message;
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  function formatTime(timestamp: string | null | undefined): string {
+    if (!timestamp) return 'Never';
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return `${diffDays}d ago`;
+  }
+
+  function getStatusColor(availability: string): string {
+    return availability === 'Up' ? 'text-green-600' : 'text-red-600';
+  }
+
   onMount(() => window.addEventListener('click', _handler));
   onDestroy(() => window.removeEventListener('click', _handler));
 </script>
 
+
 <main class="flex-1 p-12 overflow-auto">
   <div class="mb-8">
     <div class="flex justify-between items-start mb-6">
-      <h1 class="text-4xl font-bold">[{service.name}] Health</h1>
+      <h1 class="text-4xl font-bold">[{service.service_name}] Health</h1>
       <div class="flex gap-4 items-start relative">
-        <button class="px-6 py-2 bg-gray-300 hover:bg-gray-400 rounded-xl">Check</button>
+        <button
+          class="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl disabled:opacity-50"
+          on:click={runCheck}
+          disabled={isLoading}
+        >
+          {isLoading ? 'Checking...' : 'Check'}
+        </button>
 
         <!-- three-dot menu container -->
         <div class="relative">
@@ -120,49 +213,62 @@
           {#if showMenu}
             <div bind:this={menuRef} class="absolute right-0 mt-2 w-40 bg-white border rounded shadow z-50">
               <button on:click={openEdit} class="block w-full text-left px-4 py-2 hover:bg-gray-100">Edit</button>
-              <button on:click={confirmDelete} class="block w-full text-left px-4 py-2 hover:bg-gray-100">Delete</button>
+              <button on:click={confirmDelete} class="block w-full text-left px-4 py-2 hover:bg-gray-100 text-red-600">Delete</button>
             </div>
           {/if}
         </div>
       </div>
     </div>
 
+    {#if error}
+      <div class="mb-4 p-4 bg-red-100 text-red-700 rounded">
+        {error}
+      </div>
+    {/if}
+
     <div class="grid grid-cols-2 gap-8">
       <!-- Left Column -->
       <div>
         <!-- Health Status -->
-      {#if showConfirm}
-        <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div class="bg-white p-8 rounded shadow-lg max-w-sm w-full">
-            <h2 class="text-xl font-bold mb-4">Confirm to Delete?</h2>
-            <p class="text-sm text-gray-600 mb-6">This action cannot be undone.</p>
-            <div class="flex justify-end gap-4">
-              <button class="px-4 py-2 bg-gray-200 rounded" on:click={cancelDelete}>Cancel</button>
-              <button class="px-4 py-2 bg-red-500 text-white rounded" on:click={doDelete}>Delete</button>
+        {#if showConfirm}
+          <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div class="bg-white p-8 rounded shadow-lg max-w-sm w-full">
+              <h2 class="text-xl font-bold mb-4">Confirm to Delete?</h2>
+              <p class="text-sm text-gray-600 mb-6">This action cannot be undone.</p>
+              <div class="flex justify-end gap-4">
+                <button class="px-4 py-2 bg-gray-200 rounded" on:click={cancelDelete}>Cancel</button>
+                <button class="px-4 py-2 bg-red-500 text-white rounded" on:click={doDelete}>Delete</button>
+              </div>
             </div>
           </div>
-        </div>
-      {/if}
+        {/if}
 
         <div class="mb-8">
-          <p class="text-2xl font-semibold mb-2">● {service.status}</p>
-          <p class="text-lg font-bold">+ {service.health}</p>
-          <p class="text-sm text-gray-600">Last Check: {service.lastCheck}</p>
-          <p class="text-sm text-gray-600">Warnings (last 24h): {service.warnings}</p>
-          <input type="text" placeholder="URL: {service.url}" class="mt-4 w-full px-4 py-2 bg-gray-300 rounded" disabled />
-          <p class="text-sm text-gray-600 mt-2">Monitoring Method: URL-based</p>
+          <p class="text-2xl font-semibold mb-2">
+            <span class={getStatusColor(healthData.availability)}>●</span>
+            {healthData.availability}
+          </p>
+          <p class="text-lg font-bold">{healthData.overall_score !== null ? healthData.overall_score.toFixed(2) : 'N/A'}%</p>
+          <p class="text-sm text-gray-600">Last Check: {formatTime(healthData.checked_at)}</p>
+          <p class="text-sm text-gray-600">Events: {events.length}</p>
+          <input type="text" placeholder={service.service_url} class="mt-4 w-full px-4 py-2 bg-gray-300 rounded" disabled />
+          <p class="text-sm text-gray-600 mt-2">Monitoring Method: {service.check_type === 'url' ? 'URL-based' : 'URL with Metrics'}</p>
         </div>
 
-        <!-- Health Narrative -->
+        <!-- Health Narrative (Events) -->
         <div class="mb-8">
-          <h2 class="text-2xl font-bold mb-4">Health Narrative</h2>
-          <div class="bg-gray-200 p-6 rounded space-y-4">
-            {#each narratives as narrative}
-              <div>
-                <p class="text-sm font-semibold">[{narrative.type}] {narrative.time}</p>
-                <p class="text-sm text-gray-700">{narrative.message}</p>
-              </div>
-            {/each}
+          <h2 class="text-2xl font-bold mb-4">Health Events</h2>
+          <div class="bg-gray-200 p-6 rounded space-y-4 max-h-96 overflow-y-auto">
+            {#if events.length === 0}
+              <p class="text-gray-600 text-sm">No events recorded yet.</p>
+            {:else}
+              {#each events as event}
+                <div>
+                  <p class="text-sm font-semibold">[{event.event_level}] {formatTime(event.detected_at)}</p>
+                  <p class="text-sm text-gray-700">{event.event_message}</p>
+                </div>
+              {/each}
+            {/if}
           </div>
         </div>
       </div>
@@ -173,24 +279,22 @@
         <div class="mb-8">
           <h2 class="text-2xl font-bold mb-4">Health Summary</h2>
           <div class="bg-gray-100 p-4 space-y-2">
-            <p class="text-sm"><strong>Availability:</strong> {healthDetails.availability}</p>
-            <p class="text-sm"><strong>Responsiveness:</strong> {healthDetails.responsiveness}</p>
-            <p class="text-sm"><strong>Reliability:</strong> {healthDetails.reliability}</p>
+            <p class="text-sm"><strong>Availability:</strong> <span class={getStatusColor(healthData.availability)}>{healthData.availability}</span></p>
+            <p class="text-sm"><strong>Responsiveness:</strong> {healthData.responsiveness || '-'}</p>
+            <p class="text-sm"><strong>Reliability:</strong> {healthData.reliability || '-'}</p>
+            <p class="text-sm"><strong>Overall Score:</strong> {healthData.overall_score !== null ? healthData.overall_score.toFixed(2) : '-'}%</p>
           </div>
         </div>
 
         <!-- Details -->
         <div>
-          <h2 class="text-2xl font-bold mb-4">Details</h2>
+          <h2 class="text-2xl font-bold mb-4">Monitoring Details</h2>
           <div class="bg-gray-100 p-4 space-y-2 text-sm">
-            <p><strong>CPU:</strong> {healthDetails.cpu}</p>
-            <p><strong>Memory:</strong> {healthDetails.memory}</p>
-            <p><strong>Disk:</strong> {healthDetails.disk}</p>
-            <p><strong>Network:</strong> {healthDetails.network}</p>
-            <p><strong>Error rate:</strong> {healthDetails.errorRate}</p>
-            <p><strong>Request count:</strong> {healthDetails.requestCount}</p>
-            <p><strong>HTTP status code:</strong> {healthDetails.httpStatus}</p>
-            <p><strong>Latency:</strong> {healthDetails.latency}</p>
+            <p><strong>HTTP Status:</strong> {healthData.http_status || '-'}</p>
+            <p><strong>Latency:</strong> {healthData.latency_ms !== null ? healthData.latency_ms.toFixed(2) : '-'} ms</p>
+            <p><strong>Service URL:</strong> <span class="text-blue-600 break-all">{service.service_url}</span></p>
+            <p><strong>Check Type:</strong> {service.check_type}</p>
+            <p><strong>Created:</strong> {new Date(service.created_at).toLocaleString()}</p>
           </div>
         </div>
       </div>
