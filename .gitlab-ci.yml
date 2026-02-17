@@ -89,8 +89,7 @@ sonarcloud-check:
     - master
     - main
     - pre-prod
-  rules:
-    - if: $CI_COMMIT_BRANCH == "pre-prod" || $CI_COMMIT_BRANCH == "main"
+
 
 
 
