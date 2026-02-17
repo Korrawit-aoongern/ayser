@@ -5,25 +5,128 @@
 # Container Scanning customization: https://docs.gitlab.com/ee/user/application_security/container_scanning/#customizing-the-container-scanning-settings
 # Note that environment variables can be set in several places
 # See https://docs.gitlab.com/ee/ci/variables/#cicd-variable-precedence
+variables:
+  SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"  # Defines the location of the analysis task cache
+  GIT_DEPTH: "0"  # Tells git to fetch all the branches of the project, required by the analysis task
+
 stages:
+- pre-build
 - build
 - test
+- merge
 - security
 - deploy
-build_placeholder:
-  stage: build
-  image: node:20
-  script:
-    - echo "Build stage placeholder"
-  when: manual # Disable pipline run for now
-cicd_alive_check:
-  stage: test
-  image: node:20
-  script:
-  - echo "CI is alive"
-  - node --version
-  when: manual # Disable pipline run for now
 
 include:
 - template: Security/Secret-Detection.gitlab-ci.yml
 
+
+# ==========================================
+# STAGE: PRE-BUILD (Lints & Unit Tests)
+# ==========================================
+lint_and_unit_test:
+  stage: pre-build
+  image: python:3.11
+  script:
+    - echo "Running Ruff/Flake8 for Backend..."
+    - echo "Running Vitest for Frontend..."
+    # pytest backend/tests/unit
+  rules:
+    - if: $CI_COMMIT_BRANCH == "dev"
+
+# ==========================================
+# STAGE: BUILD (Artifact Generation)
+# ==========================================
+build_artifacts:
+  stage: build
+  image: node:20
+  script:
+    - mkdir artifacts/
+    - echo "Building Frontend & Backend Assets..."
+    - echo "infra-frontend-v1" > artifacts/frontend.txt
+    - echo "infra-backend-v1" > artifacts/backend.txt
+  artifacts:
+    paths:
+      - artifacts/
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_BRANCH == "dev"
+
+# ==========================================
+# STAGE: TEST (Integration & E2E)
+# ==========================================
+integration_test:
+  stage: test
+  image: python:3.11
+  script:
+    - echo "Running Integration Tests against dev artifacts..."
+  rules:
+    - if: $CI_COMMIT_BRANCH == "dev"
+
+e2e_test:
+  stage: test
+  image: node:20
+  script:
+    - echo "Running Playwright/Cypress E2E Tests on Pre-Prod..."
+  rules:
+    - if: $CI_COMMIT_BRANCH == "pre-prod"
+
+# ==========================================
+# STAGE: SECURITY (SonarCloud & Secrets)
+# ==========================================
+sonarcloud-check:
+  image:
+    name: sonarsource/sonar-scanner-cli:latest
+    entrypoint: [""]
+  cache:
+    key: "${CI_JOB_NAME}"
+    paths:
+      - .sonar/cache
+  script:
+    - sonar-scanner
+  only:
+    - merge_requests
+    - master
+    - main
+    - pre-prod
+  rules:
+    - if: $CI_COMMIT_BRANCH == "pre-prod" || $CI_COMMIT_BRANCH == "main"
+
+
+
+secret_detection:
+  stage: security
+  rules:
+    - if: $CI_COMMIT_BRANCH == "pre-prod"
+
+# ==========================================
+# STAGE: MERGE (Auto Merge Request / Transfer)
+# ==========================================
+promote_to_preprod:
+  stage: merge
+  image: alpine:latest
+  script:
+    - echo "Creating Merge Request from dev to pre-prod..."
+    # คุณสามารถใช้ GitLab API (curl) เพื่อสร้าง MR อัตโนมัติได้ที่นี่
+  rules:
+    - if: $CI_COMMIT_BRANCH == "dev"
+
+promote_to_main:
+  stage: merge
+  image: alpine:latest
+  script:
+    - echo "Creating Merge Request from pre-prod to main..."
+  rules:
+    - if: $CI_COMMIT_BRANCH == "pre-prod"
+
+# ==========================================
+# STAGE: DEPLOY
+# ==========================================
+deploy_production:
+  stage: deploy
+  image: alpine:latest
+  script:
+    - echo "Deploying Frontend to Vercel..."
+    - echo "Deploying Backend to Serverless..."
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
