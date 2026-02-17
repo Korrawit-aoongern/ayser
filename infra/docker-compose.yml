@@ -6,10 +6,9 @@ services:
     container_name: ayser-backend
     ports:
       - "8000:8000"
+    env_file:
+      - ../backend/.env
     environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - JWT_SECRET=${JWT_SECRET}
-      - ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
       - APP_ENV=dev
     volumes:
       - ../backend/app:/app/app
@@ -17,6 +16,9 @@ services:
     networks:
       - ayser-network
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
 
   frontend:
     build:
@@ -33,10 +35,6 @@ services:
       - ../frontend/vite.config.ts:/app/vite.config.ts
     networks:
       - ayser-network
-    environment:
-      - VITE_API_URL=http://localhost:8000/api
-      - PUBLIC_API_BASE_URL=http://localhost:8000
-
 networks:
   ayser-network:
     driver: bridge

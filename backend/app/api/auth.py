@@ -110,7 +110,7 @@ async def login(data: LoginReq, response: Response):
         key="access_token",
         value=token,
         httponly=True,
-        secure=True,
+        secure=False,  # Set to True in production with HTTPS
         samesite="lax",
         max_age=7*24*60*60  # 7 days
     )
