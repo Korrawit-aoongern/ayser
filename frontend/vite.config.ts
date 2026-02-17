@@ -8,7 +8,7 @@ export default defineConfig({
         proxy: {
             // เมื่อเรียก /api ใน frontend จะถูกส่งไปหา backend โดยอัตโนมัติ
             '/api': {
-                target: 'http://backend:8000', // ชื่อ service ใน docker-compose
+                target: 'http://localhost:8000',
                 changeOrigin: true,
             }
         }
