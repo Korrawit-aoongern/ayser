@@ -1,80 +1,82 @@
-# You can override the included template(s) by including variable overrides
-# SAST customization: https://docs.gitlab.com/ee/user/application_security/sast/#customizing-the-sast-settings
-# Secret Detection customization: https://docs.gitlab.com/user/application_security/secret_detection/pipeline/configure
-# Dependency Scanning customization: https://docs.gitlab.com/ee/user/application_security/dependency_scanning/#customizing-the-dependency-scanning-settings
-# Container Scanning customization: https://docs.gitlab.com/ee/user/application_security/container_scanning/#customizing-the-container-scanning-settings
-# Note that environment variables can be set in several places
-# See https://docs.gitlab.com/ee/ci/variables/#cicd-variable-precedence
 variables:
-  SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"  # Defines the location of the analysis task cache
-  GIT_DEPTH: "0"  # Tells git to fetch all the branches of the project, required by the analysis task
+  SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"
+  GIT_DEPTH: "0"
+  DOCKER_TLS_CERTDIR: "/certs"
+  FRONTEND_IMAGE: "${CI_REGISTRY_IMAGE}/infra-frontend:${CI_COMMIT_SHA}"
+  BACKEND_IMAGE: "${CI_REGISTRY_IMAGE}/infra-backend:${CI_COMMIT_SHA}"
+
+workflow:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+    - if: '$CI_COMMIT_BRANCH == "pre-prod"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - when: never
 
 stages:
-- pre-build
-- build
-- test
-- merge
-- security
-- deploy
+  - pre-build
+  - build
+  - security
+  - test
+  - merge
+  - deploy
 
 include:
-- template: Security/Secret-Detection.gitlab-ci.yml
-
+  - template: Security/Secret-Detection.gitlab-ci.yml
 
 # ==========================================
-# STAGE: PRE-BUILD (Lints & Unit Tests)
+# STAGE: PRE-BUILD (dev only)
 # ==========================================
 lint_and_unit_test:
   stage: pre-build
-  image: python:3.11
+  image: alpine:3.20
   script:
-    - echo "Running Ruff/Flake8 for Backend..."
-    - echo "Running Vitest for Frontend..."
-    # pytest backend/tests/unit
+    - apk add --no-cache python3 py3-pip nodejs npm
+    - pip install --break-system-packages ruff pytest
+    - echo "Running backend lint (ruff)..."
+    - ruff check backend/app
+    - echo "Running backend unit tests (or smoke fallback)..."
+    - if [ -d backend/tests/unit ]; then pytest -q backend/tests/unit; else python3 -m compileall backend/app; fi
+    - echo "Running frontend lint and type checks..."
+    - cd frontend
+    - npm ci
+    - npm run lint
+    - npm run check
   rules:
-    - if: $CI_COMMIT_BRANCH == "dev"
+    - if: '$CI_COMMIT_BRANCH == "dev"'
 
 # ==========================================
-# STAGE: BUILD (Artifact Generation)
+# STAGE: BUILD (dev only, Docker images)
 # ==========================================
 build_artifacts:
   stage: build
-  image: node:20
+  image: docker:27.1.1
+  services:
+    - name: docker:27.1.1-dind
   script:
-    - mkdir artifacts/
-    - echo "Building Frontend & Backend Assets..."
-    - echo "infra-frontend-v1" > artifacts/frontend.txt
-    - echo "infra-backend-v1" > artifacts/backend.txt
+    - echo "Logging into GitLab Container Registry..."
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - echo "Building frontend image..."
+    - docker build -f infra/Dockerfile.frontend -t "$FRONTEND_IMAGE" .
+    - echo "Building backend image..."
+    - docker build -f infra/Dockerfile.backend -t "$BACKEND_IMAGE" .
+    - echo "Pushing images..."
+    - docker push "$FRONTEND_IMAGE"
+    - docker push "$BACKEND_IMAGE"
+    - mkdir -p artifacts
+    - echo "FRONTEND_IMAGE=$FRONTEND_IMAGE" > artifacts/image-tags.env
+    - echo "BACKEND_IMAGE=$BACKEND_IMAGE" >> artifacts/image-tags.env
   artifacts:
     paths:
-      - artifacts/
+      - artifacts/image-tags.env
     expire_in: 1 week
   rules:
-    - if: $CI_COMMIT_BRANCH == "dev"
+    - if: '$CI_COMMIT_BRANCH == "dev"'
 
 # ==========================================
-# STAGE: TEST (Integration & E2E)
-# ==========================================
-integration_test:
-  stage: test
-  image: python:3.11
-  script:
-    - echo "Running Integration Tests against dev artifacts..."
-  rules:
-    - if: $CI_COMMIT_BRANCH == "dev"
-
-e2e_test:
-  stage: test
-  image: node:20
-  script:
-    - echo "Running Playwright/Cypress E2E Tests on Pre-Prod..."
-  rules:
-    - if: $CI_COMMIT_BRANCH == "pre-prod"
-
-# ==========================================
-# STAGE: SECURITY (SonarCloud & Secrets)
+# STAGE: SECURITY (pre-prod only)
 # ==========================================
 sonarcloud-check:
+  stage: security
   image:
     name: sonarsource/sonar-scanner-cli:latest
     entrypoint: [""]
@@ -83,50 +85,96 @@ sonarcloud-check:
     paths:
       - .sonar/cache
   script:
+    - echo "Running Sonar scanner (stub-ready)..."
     - sonar-scanner
   only:
     - merge_requests
     - master
     - main
     - pre-prod
-  rules:
-    - if: $CI_COMMIT_BRANCH == "pre-prod" || $CI_COMMIT_BRANCH == "main"
-
-
 
 secret_detection:
   stage: security
   rules:
-    - if: $CI_COMMIT_BRANCH == "pre-prod"
+    - if: '$CI_COMMIT_BRANCH == "pre-prod"'
 
 # ==========================================
-# STAGE: MERGE (Auto Merge Request / Transfer)
+# STAGE: TEST
+# ==========================================
+integration_test:
+  stage: test
+  image: docker:27.1.1
+  services:
+    - name: docker:27.1.1-dind
+  needs:
+    - job: build_artifacts
+      artifacts: true
+  script:
+    - source artifacts/image-tags.env
+    - echo "Logging into GitLab Container Registry..."
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - echo "Pulling built images..."
+    - docker pull "$FRONTEND_IMAGE"
+    - docker pull "$BACKEND_IMAGE"
+    - echo "Running integration test stub against built images..."
+    - echo "spin up containers and run integration suite"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+
+e2e_test:
+  stage: test
+  image: docker:27.1.1
+  services:
+    - name: docker:27.1.1-dind
+  script:
+    - echo "Running E2E test stub on pre-prod..."
+    - echo "pull deployed pre-prod image/tag and run Playwright/Cypress"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "pre-prod"'
+
+# ==========================================
+# STAGE: MERGE (Draft MR via API)
 # ==========================================
 promote_to_preprod:
   stage: merge
-  image: alpine:latest
+  image: curlimages/curl:8.10.1
+  allow_failure: false
   script:
-    - echo "Creating Merge Request from dev to pre-prod..."
-    # คุณสามารถใช้ GitLab API (curl) เพื่อสร้าง MR อัตโนมัติได้ที่นี่
+    - echo "Creating Draft MR from dev -> pre-prod..."
+    - |
+      curl --fail --request POST \
+        --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
+        --header "Content-Type: application/json" \
+        --data "{\"source_branch\":\"dev\",\"target_branch\":\"pre-prod\",\"title\":\"Draft: Promote dev to pre-prod (${CI_COMMIT_SHORT_SHA})\",\"remove_source_branch\":false,\"squash\":false}" \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests"
   rules:
-    - if: $CI_COMMIT_BRANCH == "dev"
+    - if: '$CI_COMMIT_BRANCH == "dev"'
 
 promote_to_main:
   stage: merge
-  image: alpine:latest
+  image: curlimages/curl:8.10.1
+  allow_failure: false
   script:
-    - echo "Creating Merge Request from pre-prod to main..."
+    - echo "Creating Draft MR from pre-prod -> main..."
+    - |
+      curl --fail --request POST \
+        --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
+        --header "Content-Type: application/json" \
+        --data "{\"source_branch\":\"pre-prod\",\"target_branch\":\"main\",\"title\":\"Draft: Promote pre-prod to main (${CI_COMMIT_SHORT_SHA})\",\"remove_source_branch\":false,\"squash\":false}" \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests"
   rules:
-    - if: $CI_COMMIT_BRANCH == "pre-prod"
+    - if: '$CI_COMMIT_BRANCH == "pre-prod"'
 
 # ==========================================
-# STAGE: DEPLOY
+# STAGE: DEPLOY (main only)
 # ==========================================
 deploy_production:
   stage: deploy
-  image: alpine:latest
+  image: alpine:3.20
   script:
-    - echo "Deploying Frontend to Vercel..."
-    - echo "Deploying Backend to Serverless..."
+    - echo "Deploying frontend to Vercel (stub)..."
+    - echo "vercel deploy --prod"
+    - echo "Deploying backend to serverless (stub)..."
+    - echo "run backend serverless deploy command"
   rules:
-    - if: $CI_COMMIT_BRANCH == "main"
+    - if: '$CI_COMMIT_BRANCH == "main"'
