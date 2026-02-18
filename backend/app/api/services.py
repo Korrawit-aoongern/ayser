@@ -1,5 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List
+
+from httpx import request
 from ..schemas.service import ServiceCreate, ServiceUpdate, ServiceResponse
 import asyncpg
 import os
@@ -9,19 +11,40 @@ router = APIRouter(prefix="/services", tags=["services"])
 
 
 async def get_db():
-    return await asyncpg.connect(os.getenv("DATABASE_URL"))
+    return await asyncpg.connect(os.getenv("DATABASE_URL"), statement_cache_size=0)
 
 
 @router.get("", response_model=List[ServiceResponse])
 async def get_all_services(user_id=Depends(require_user)):
     """Get all services for the current user"""
+
     db = await get_db()
     try:
         services = await db.fetch(
-            "SELECT service_id, service_name, service_url, check_type, created_at FROM services WHERE user_id=$1 ORDER BY created_at DESC",
+            """
+            SELECT
+                s.service_id,
+                s.user_id,
+                s.service_name,
+                s.service_url,
+                s.check_type,
+                s.created_at,
+                h.availability,
+                h.checked_at
+            FROM services s
+            LEFT JOIN LATERAL (
+                SELECT availability, checked_at
+                FROM service_health
+                WHERE service_id = s.service_id
+                ORDER BY checked_at DESC
+                LIMIT 1
+            ) h ON TRUE
+            WHERE s.user_id = $1
+            ORDER BY s.created_at
+            """,
             user_id
         )
-        
+
         return [dict(service) for service in services]
     finally:
         await db.close()
@@ -33,7 +56,7 @@ async def get_service(service_id: int, user_id=Depends(require_user)):
     db = await get_db()
     try:
         service = await db.fetchrow(
-            "SELECT service_id, service_name, service_url, check_type, created_at FROM services WHERE service_id=$1 AND user_id=$2",
+            "SELECT service_id, user_id, service_name, service_url, check_type, created_at FROM services WHERE service_id=$1 AND user_id=$2",
             service_id, user_id
         )
         
@@ -60,7 +83,7 @@ async def create_service(service: ServiceCreate, user_id=Depends(require_user)):
         )
         
         created = await db.fetchrow(
-            "SELECT service_id, service_name, service_url, check_type, created_at FROM services WHERE service_id=$1",
+            "SELECT service_id, user_id, service_name, service_url, check_type, created_at FROM services WHERE service_id=$1",
             service_id
         )
         
@@ -99,12 +122,12 @@ async def update_service(service_id: int, service: ServiceUpdate, user_id=Depend
                 UPDATE services 
                 SET {', '.join(set_clauses)}
                 WHERE service_id=${len(params)-1} AND user_id=${len(params)}
-                RETURNING service_id, service_name, service_url, check_type, created_at
+                RETURNING service_id, user_id, service_name, service_url, check_type, created_at
             """
             updated = await db.fetchrow(query, *params)
         else:
             updated = await db.fetchrow(
-                "SELECT service_id, service_name, service_url, check_type, created_at FROM services WHERE service_id=$1",
+                "SELECT service_id, user_id, service_name, service_url, check_type, created_at FROM services WHERE service_id=$1",
                 service_id
             )
         

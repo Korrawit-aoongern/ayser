@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { PUBLIC_API_BASE_URL } from '$env/static/public';
-  
   let username = '';
   let email = '';
   let password = '';
@@ -9,7 +7,7 @@
   async function handleRegister(e: Event) {
     e.preventDefault();
 
-    const res = await fetch(`${PUBLIC_API_BASE_URL}/api/auth/register`, {
+    const res = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',

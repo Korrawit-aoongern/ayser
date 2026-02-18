@@ -1,5 +1,11 @@
 <script lang="ts">
   import { page } from '$app/stores';
+  import { browser } from '$app/environment';
+  import { goto } from '$app/navigation';
+
+  let serviceId: number | null = null;
+  let loading = false;
+  let error = '';
 
   let formData = {
     serviceName: '',
@@ -8,49 +14,91 @@
     metricsEndpoint: '',
   };
 
-  let advancedMethods = [
-    'None',
-    'Metrics endpoint'
-  ];
+  const advancedMethods = ['None', 'Metrics endpoint'];
 
-  // Load service data based on ID
-  $: if ($page.url.searchParams.get('id')) {
-    const serviceId = parseInt($page.url.searchParams.get('id') || '1');
-    loadService(serviceId);
+  function toAdvancedMethod(checkType: string | null | undefined) {
+    return checkType === 'url_metrics' ? 'Metrics endpoint' : 'None';
   }
 
-  function loadService(id: number) {
-    // Mock data - in real app, fetch from API
-    const serviceData: Record<number, any> = {
-      1: {
-        serviceName: 'Service 1',
-        url: 'https://example.com',
-        advancedMethod: 'None',
-        metricsEndpoint: '',
-      },
-      2: {
-        serviceName: 'Service 2 Healths',
-        url: 'https://service2.example.com',
-        advancedMethod: 'Metrics endpoint',
-        metricsEndpoint: '/metrics',
-      },
-    };
+  function toCheckType(method: string) {
+    return method === 'Metrics endpoint' ? 'url_metrics' : 'url';
+  }
 
-    const data = serviceData[id];
-    if (data) {
-      formData = { ...data };
+  // Load service data based on ID
+  $: if (browser) {
+    const rawId = $page.url.searchParams.get('id');
+    if (!rawId) {
+      error = 'Missing service id';
+    } else {
+      const parsedId = Number.parseInt(rawId, 10);
+      if (Number.isNaN(parsedId)) {
+        error = 'Invalid service id';
+      } else if (parsedId !== serviceId) {
+        serviceId = parsedId;
+        error = '';
+        loadService(parsedId);
+      }
     }
   }
 
-  function handleSave() {
-    console.log('Saving service:', formData);
-    // Add save logic here
+  async function loadService(id: number) {
+    loading = true;
+    try {
+      const res = await fetch(`/api/services/${id}`, {
+        credentials: 'include'
+      });
+
+      if (!res.ok) throw new Error(`Failed to load service (${res.status})`);
+
+      const data = await res.json();
+      formData = {
+        serviceName: data.service_name ?? '',
+        url: data.service_url ?? '',
+        advancedMethod: toAdvancedMethod(data.check_type),
+        metricsEndpoint: ''
+      };
+    } catch (e) {
+      error = (e as Error).message;
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function handleSave() {
+    if (!serviceId) return;
+    loading = true;
+    error = '';
+    try {
+      const res = await fetch(`/api/services/${serviceId}`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          service_name: formData.serviceName,
+          service_url: formData.url,
+          check_type: toCheckType(formData.advancedMethod)
+        })
+      });
+
+      if (!res.ok) throw new Error(`Failed to save service (${res.status})`);
+      await res.json();
+      window.dispatchEvent(new Event('services:changed'));
+      await goto(`/services/details?id=${serviceId}`);
+    } catch (e) {
+      error = (e as Error).message;
+    } finally {
+      loading = false;
+    }
   }
 </script>
 
 <main class="flex-1 p-12">
   <h1 class="text-4xl font-bold mb-8">Edit Service</h1>
   
+  {#if error}
+    <div class="mb-4 rounded bg-red-100 p-3 text-red-700">{error}</div>
+  {/if}
+
   <form class="max-w-2xl" on:submit|preventDefault={handleSave}>
     <div class="mb-6">
       <label class="block text-sm font-semibold mb-2">Service Name</label>
@@ -58,6 +106,7 @@
         type="text" 
         class="w-full px-4 py-2 border border-gray-300 rounded"
         bind:value={formData.serviceName}
+        disabled={loading}
       />
     </div>
 
@@ -67,12 +116,13 @@
         type="text" 
         class="w-full px-4 py-2 border border-gray-300 rounded"
         bind:value={formData.url}
+        disabled={loading}
       />
     </div>
 
     <div class="mb-6">
       <label class="block text-sm font-semibold mb-2">Advanced Methods</label>
-      <select class="w-full px-4 py-2 border border-gray-300 rounded bg-white" bind:value={formData.advancedMethod}>
+      <select class="w-full px-4 py-2 border border-gray-300 rounded bg-white" bind:value={formData.advancedMethod} disabled={loading}>
         {#each advancedMethods as method}
           <option value={method}>{method}</option>
         {/each}
@@ -87,15 +137,17 @@
         placeholder="Enter your /metrics endpoint URL (ex. /metrics)" 
         class="w-full px-4 py-2 border border-gray-300 rounded"
         bind:value={formData.metricsEndpoint}
+        disabled={loading}
       />
     </div>
     {/if}
 
     <button 
       type="submit"
-      class="px-6 py-2 bg-gray-300 hover:bg-gray-400 rounded text-sm font-semibold"
+      class="px-6 py-2 bg-gray-300 hover:bg-gray-400 rounded text-sm font-semibold disabled:opacity-50"
+      disabled={loading}
     >
-      Save
+      {#if loading}Saving...{:else}Save{/if}
     </button>
   </form>
 </main>

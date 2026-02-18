@@ -1,3 +1,4 @@
+import uuid
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
@@ -14,10 +15,12 @@ class ServiceUpdate(BaseModel):
 
 class ServiceResponse(BaseModel):
     service_id: int
-    user_id: Optional[str] = None
+    user_id: uuid.UUID
     service_name: str
     service_url: str
-    check_type: str
+    check_type: Optional[str] = "url"
+    availability: Optional[str] = None
+    checked_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
 
 class ServiceWithHealth(BaseModel):

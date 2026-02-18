@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Response, Depends
+from fastapi import APIRouter, HTTPException, Response, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from pydantic import BaseModel, EmailStr
@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 import hashlib
 
 load_dotenv()
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -50,9 +50,12 @@ def create_jwt(user_id: str):
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
 def require_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(security)
 ):
-    token = credentials.credentials
+    token = credentials.credentials if credentials else request.cookies.get("access_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
 
     try:
         payload = jwt.decode(
@@ -124,7 +127,7 @@ async def logout(response: Response):
     response.delete_cookie(
         key="access_token",
         httponly=True,
-        secure=True,
+        secure=False,
         samesite="lax"
     )
     return {"message": "Logout successful"}

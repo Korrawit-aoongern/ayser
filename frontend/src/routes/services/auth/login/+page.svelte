@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { PUBLIC_API_BASE_URL } from '$env/static/public';
-  
   let email = '';
   let password = '';
   let error = '';
@@ -11,7 +9,7 @@
     loading = true;
     error = '';
 
-    const res = await fetch(`${PUBLIC_API_BASE_URL}/api/auth/login`, {
+    const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',

@@ -5,14 +5,14 @@ import httpx
 import time
 import os
 import asyncpg
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 router = APIRouter(prefix="/health", tags=["health"])
 
 # ---- DB ----
 async def get_db():
-    return await asyncpg.connect(os.getenv("DATABASE_URL"))
+    return await asyncpg.connect(os.getenv("DATABASE_URL"), statement_cache_size=0)
 
 
 # ---- ROUTE ----
@@ -22,7 +22,7 @@ async def get_service_health(service_id: int, user_id=Depends(require_user)):
     db = await get_db()
     try:
         service = await db.fetchrow(
-            "SELECT service_id, service_name, service_url FROM services WHERE service_id=$1 AND user_id=$2",
+            "SELECT service_id, service_name, service_url, check_type, created_at FROM services WHERE service_id=$1 AND user_id=$2",
             service_id, user_id
         )
 
@@ -40,9 +40,31 @@ async def get_service_health(service_id: int, user_id=Depends(require_user)):
             service_id
         )
 
+        latest_latency = await db.fetchval(
+            """
+            SELECT metric_value
+            FROM service_metrics
+            WHERE service_id=$1 AND metric_name='response_latency'
+            ORDER BY collected_at DESC
+            LIMIT 1
+            """,
+            service_id
+        )
+
+        http_status = None
+        if health and health["availability"] == "Up":
+            try:
+                async with httpx.AsyncClient(timeout=5) as client:
+                    response = await client.get(service["service_url"])
+                http_status = response.status_code
+            except Exception:
+                http_status = None
+        elif health and health["availability"] == "Down":
+            http_status = 503
+
         events = await db.fetch(
             """
-            SELECT event_level as type, event_message as message, detected_at
+            SELECT event_id, service_id, event_level, event_message, detected_at
             FROM service_events
             WHERE service_id=$1
             ORDER BY detected_at DESC
@@ -51,13 +73,27 @@ async def get_service_health(service_id: int, user_id=Depends(require_user)):
             service_id
         )
 
+        health_payload = dict(health) if health else {
+            "health_id": None,
+            "service_id": service_id,
+            "availability": "Unknown",
+            "responsiveness": None,
+            "reliability": None,
+            "overall_score": None,
+            "checked_at": None
+        }
+        health_payload["latency_ms"] = float(latest_latency) if latest_latency is not None else None
+        health_payload["http_status"] = http_status
+
         return {
             "service": {
                 "service_id": service["service_id"],
                 "service_name": service["service_name"],
-                "service_url": service["service_url"]
+                "service_url": service["service_url"],
+                "check_type": service["check_type"],
+                "created_at": service["created_at"]
             },
-            "health": dict(health) if health else {},
+            "health": health_payload,
             "events": [dict(e) for e in events]
         }
     finally:
@@ -203,7 +239,7 @@ async def check_service(service_id: int, user_id=Depends(require_user)):
             "latency_ms": latency_ms,
             "http_status": http_status,
             "overall_score": overall_score,
-            "checked_at": datetime.utcnow().isoformat()
+            "checked_at": datetime.now(timezone.utc).isoformat()
         }
 
     finally:

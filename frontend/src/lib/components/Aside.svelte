@@ -1,14 +1,19 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { PUBLIC_API_BASE_URL } from '$env/static/public';
+	import { onMount } from 'svelte';
+	import { browser } from '$app/environment';
     import AyserIcon from '../assets/Ayser-Icon.png';
+
+	let services: Array<{ id: number; name: string }> = [];
+	let loading = true;
+	let error = '';
 
 	async function logout(e : Event) {
 		e.preventDefault();
 		
 		try {
-			const res = await fetch(`${PUBLIC_API_BASE_URL}/api/auth/logout`, {
+			const res = await fetch('/api/auth/logout', {
 				method: 'POST',
 				credentials: 'include',
 			});
@@ -24,6 +29,48 @@
 			alert('Logout error');
 		}
 	}
+
+	async function loadServices() {
+		try {
+			const res = await fetch('/api/services', {
+				method: 'GET',
+				credentials: 'include',
+				headers: {
+					'Content-Type': 'application/json'
+				}
+			});
+
+			if (res.status === 401) {
+				await goto('/services/auth/login');
+				return;
+			}
+
+			if (!res.ok) throw new Error(`HTTP error: ${res.status}`);
+
+			const data = await res.json();
+			services = data.map((s: any) => ({
+				id: s.service_id,
+				name: s.service_name || `Service ${s.service_id}`
+			}));
+		} catch (e: any) {
+			error = e.message;
+		} finally {
+			loading = false;
+		}
+	}
+
+	onMount(() => {
+		if (!browser) return;
+		loadServices();
+		const handler = () => {
+			loading = true;
+			loadServices();
+		};
+		window.addEventListener('services:changed', handler);
+		return () => {
+			window.removeEventListener('services:changed', handler);
+		};
+	});
 </script>
 
 <!-- Left Sidebar -->
@@ -47,24 +94,23 @@
 			>
 				All Services
 			</a>
-			<a
-				href="/services/details?id=1"
-				class="block w-full rounded-xl px-4 py-3 text-sm text-center bg-gray-300 hover:bg-gray-400 {$page.url
-					.pathname === '/services/details' && $page.url.searchParams.get('id') === '1'
-					? 'bg-gray-400 font-bold'
-					: ''}"
-			>
-				Service 1
-			</a>
-			<a
-				href="/services/details?id=2"
-				class="block w-full rounded-xl px-4 py-3 text-sm text-center bg-gray-300 hover:bg-gray-400 {$page.url
-					.pathname === '/services/details' && $page.url.searchParams.get('id') === '2'
-					? 'bg-gray-400 font-bold'
-					: ''}"
-			>
-				Service 2
-			</a>
+			{#if loading}
+				<div class="px-4 py-2 text-sm text-gray-500">Loading...</div>
+			{:else if error}
+				<div class="px-4 py-2 text-sm text-red-600">Failed to load</div>
+			{:else}
+				{#each services as service}
+					<a
+						href={`/services/details?id=${service.id}`}
+						class="block w-full rounded-xl px-4 py-3 text-sm text-center bg-gray-300 hover:bg-gray-400 {$page.url
+							.pathname === '/services/details' && $page.url.searchParams.get('id') === String(service.id)
+							? 'bg-gray-400 font-bold'
+							: ''}"
+					>
+						{service.name}
+					</a>
+				{/each}
+			{/if}
 			<a
 				href="/services/new"
 				class="block w-full rounded-xl px-4 py-3 text-sm text-center bg-gray-300 hover:bg-gray-400 {$page

@@ -1,16 +1,16 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
-  import { onMount, onDestroy } from 'svelte';
-  import { PUBLIC_API_BASE_URL } from '$env/static/public';
+  import { browser } from '$app/environment';
+  import { onMount } from 'svelte';
 
   let serviceId: number = 1;
   let service = {
     service_id: 0,
-    service_name: "Example Service",
-    service_url: "https://example.com",
-    check_type: "url",
-    created_at: new Date().toISOString(),
+    service_name: "Loading...",
+    service_url: "Loading...",
+    check_type: "Loading...",
+    created_at: "Loading...",
   };
 
   let healthData: {
@@ -26,13 +26,13 @@
   } = {
     health_id: null,
     service_id: 0,
-    availability: "Unknown",
-    responsiveness: null,
-    reliability: null,
+    availability: "Loading...",
+    responsiveness: "Loading...",
+    reliability: "Loading...",
     overall_score: null,
     latency_ms: null,
     http_status: null,
-    checked_at: null,
+    checked_at: "Loading...",
   };
 
   let events: Array<{
@@ -44,41 +44,72 @@
   }> = [];
 
   let isLoading = false;
+  let isPageLoading = false;
   let error = "";
+  let lastLoadedServiceId: number | null = null;
+  let showLastCheckRelative = true;
 
-  $: if ($page.url.searchParams.get('id')) {
-    serviceId = parseInt($page.url.searchParams.get('id') || '1');
-    loadService(serviceId);
+  $: if (browser) {
+    const rawId = $page.url.searchParams.get('id');
+    if (!rawId) {
+      error = 'Missing service id';
+    } else {
+      const parsedId = Number.parseInt(rawId, 10);
+      if (Number.isNaN(parsedId)) {
+        error = 'Invalid service id';
+      } else if (parsedId !== lastLoadedServiceId) {
+        serviceId = parsedId;
+        lastLoadedServiceId = parsedId;
+        error = "";
+        loadService(serviceId, true);
+      }
+    }
   }
 
-  async function loadService(id: number) {
-    const token = localStorage.getItem('access_token');
-
+  async function loadService(id: number, showOverlay = false) {
+    if (showOverlay) isPageLoading = true;
     try {
-      const res = await fetch(`${PUBLIC_API_BASE_URL}/api/health/services/${id}`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+      const res = await fetch(`/api/health/services/${id}`, {
+        credentials: 'include'
       });
 
       if (!res.ok) throw new Error('Failed to load service');
 
       const data = await res.json();
-      service = data.service;
-      healthData = data.health || {
-        health_id: null,
-        service_id: id,
-        availability: "Unknown",
-        responsiveness: null,
-        reliability: null,
-        overall_score: null,
-        latency_ms: null,
-        http_status: null,
-        checked_at: null,
+      const servicePayload = data?.service ?? {};
+      const healthPayload = data?.health ?? {};
+
+      service = {
+        service_id: servicePayload.service_id ?? id,
+        service_name: servicePayload.service_name ?? "Unknown Service",
+        service_url: servicePayload.service_url ?? "",
+        check_type: servicePayload.check_type ?? "url",
+        created_at: servicePayload.created_at ?? new Date().toISOString(),
       };
-      events = data.events || [];
+
+      healthData = {
+        health_id: healthPayload.health_id ?? null,
+        service_id: healthPayload.service_id ?? id,
+        availability: healthPayload.availability ?? "Unknown",
+        responsiveness: healthPayload.responsiveness ?? null,
+        reliability: healthPayload.reliability ?? null,
+        overall_score: healthPayload.overall_score ?? null,
+        latency_ms: healthPayload.latency_ms ?? null,
+        http_status: healthPayload.http_status ?? null,
+        checked_at: healthPayload.checked_at ?? null,
+      };
+
+      events = (data?.events ?? []).map((event: any) => ({
+        event_id: event.event_id,
+        service_id: event.service_id ?? id,
+        event_level: event.event_level ?? event.type ?? "INFO",
+        event_message: event.event_message ?? event.message ?? "",
+        detected_at: event.detected_at
+      }));
     } catch (e) {
       error = (e as Error).message;
+    } finally {
+      if (showOverlay) isPageLoading = false;
     }
   }
 
@@ -108,15 +139,13 @@
 
   async function doDelete() {
     showConfirm = false;
-    const token = localStorage.getItem('access_token');
 
     try {
-      await fetch(`${PUBLIC_API_BASE_URL}/api/services/${serviceId}`, {
+      await fetch(`/api/services/${serviceId}`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        credentials: 'include'
       });
+      window.dispatchEvent(new Event('services:changed'));
       goto('/services');
     } catch (e) {
       error = (e as Error).message;
@@ -131,16 +160,13 @@
   };
 
   async function runCheck() {
-    const token = localStorage.getItem('access_token');
     isLoading = true;
     error = "";
 
     try {
-      const res = await fetch(`${PUBLIC_API_BASE_URL}/api/health/services/${serviceId}/check`, {
+      const res = await fetch(`/api/health/services/${serviceId}/check`, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        credentials: 'include'
       });
 
       if (!res.ok) throw new Error('Health check failed');
@@ -161,7 +187,7 @@
       };
 
       // Reload service data to get new events
-      await loadService(serviceId);
+      await loadService(serviceId, false);
     } catch (e) {
       error = (e as Error).message;
     } finally {
@@ -171,7 +197,9 @@
 
   function formatTime(timestamp: string | null | undefined): string {
     if (!timestamp) return 'Never';
-    const date = new Date(timestamp);
+    const hasTimezone = /([zZ]|[+-]\d{2}:\d{2})$/.test(timestamp);
+    const normalized = hasTimezone ? timestamp : `${timestamp}Z`;
+    const date = new Date(normalized);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
@@ -184,31 +212,43 @@
     return `${diffDays}d ago`;
   }
 
+  function formatTimeAbsolute(timestamp: string | null | undefined): string {
+    if (!timestamp) return 'Never';
+    const hasTimezone = /([zZ]|[+-]\d{2}:\d{2})$/.test(timestamp);
+    const normalized = hasTimezone ? timestamp : `${timestamp}Z`;
+    return new Date(normalized).toLocaleString();
+  }
+
   function getStatusColor(availability: string): string {
     return availability === 'Up' ? 'text-green-600' : 'text-red-600';
   }
 
-  onMount(() => window.addEventListener('click', _handler));
-  onDestroy(() => window.removeEventListener('click', _handler));
+  onMount(() => {
+    if (!browser) return;
+    window.addEventListener('click', _handler);
+    return () => {
+      window.removeEventListener('click', _handler);
+    };
+  });
 </script>
 
 
 <main class="flex-1 p-12 overflow-auto">
   <div class="mb-8">
     <div class="flex justify-between items-start mb-6">
-      <h1 class="text-4xl font-bold">[{service.service_name}] Health</h1>
+      <h1 class="text-4xl font-bold">{service.service_name}</h1>
       <div class="flex gap-4 items-start relative">
         <button
           class="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl disabled:opacity-50"
           on:click={runCheck}
-          disabled={isLoading}
+          disabled={isLoading || isPageLoading}
         >
           {isLoading ? 'Checking...' : 'Check'}
         </button>
 
         <!-- three-dot menu container -->
         <div class="relative">
-          <button bind:this={menuButtonRef} on:click|stopPropagation={toggleMenu} class="text-gray-500 hover:text-gray-700 px-2 py-1">⋮</button>
+          <button bind:this={menuButtonRef} on:click|stopPropagation={toggleMenu} disabled={isLoading || isPageLoading} class="text-gray-500 hover:text-gray-700 px-2 py-1">⋮</button>
 
           {#if showMenu}
             <div bind:this={menuRef} class="absolute right-0 mt-2 w-40 bg-white border rounded shadow z-50">
@@ -226,7 +266,7 @@
       </div>
     {/if}
 
-    <div class="grid grid-cols-2 gap-8">
+    <div class={`relative grid grid-cols-2 gap-8 ${isPageLoading ? 'opacity-60' : ''}`}>
       <!-- Left Column -->
       <div>
         <!-- Health Status -->
@@ -248,11 +288,19 @@
             <span class={getStatusColor(healthData.availability)}>●</span>
             {healthData.availability}
           </p>
-          <p class="text-lg font-bold">{healthData.overall_score !== null ? healthData.overall_score.toFixed(2) : 'N/A'}%</p>
-          <p class="text-sm text-gray-600">Last Check: {formatTime(healthData.checked_at)}</p>
+          <p class="text-lg font-bold">{typeof healthData.overall_score === 'number' ? healthData.overall_score.toFixed(2) : 'N/A'}%</p>
+          <button
+            type="button"
+            class="text-left text-sm text-gray-600 hover:text-gray-800"
+            on:click={() => (showLastCheckRelative = !showLastCheckRelative)}
+            disabled={isLoading || isPageLoading}
+            title="Toggle last check format"
+          >
+            Last Check: {showLastCheckRelative ? formatTime(healthData.checked_at) : formatTimeAbsolute(healthData.checked_at)}
+          </button>
           <p class="text-sm text-gray-600">Events: {events.length}</p>
           <input type="text" placeholder={service.service_url} class="mt-4 w-full px-4 py-2 bg-gray-300 rounded" disabled />
-          <p class="text-sm text-gray-600 mt-2">Monitoring Method: {service.check_type === 'url' ? 'URL-based' : 'URL with Metrics'}</p>
+          <p class="text-sm text-gray-600 mt-2">Monitoring Method: {service.check_type === 'url' ? 'URL-based' : service.check_type === 'url_metrics' ? 'URL with Metrics' : 'Loading...'}</p>
         </div>
 
         <!-- Health Narrative (Events) -->
@@ -282,7 +330,7 @@
             <p class="text-sm"><strong>Availability:</strong> <span class={getStatusColor(healthData.availability)}>{healthData.availability}</span></p>
             <p class="text-sm"><strong>Responsiveness:</strong> {healthData.responsiveness || '-'}</p>
             <p class="text-sm"><strong>Reliability:</strong> {healthData.reliability || '-'}</p>
-            <p class="text-sm"><strong>Overall Score:</strong> {healthData.overall_score !== null ? healthData.overall_score.toFixed(2) : '-'}%</p>
+            <p class="text-sm"><strong>Overall Score:</strong> {typeof healthData.overall_score === 'number' ? healthData.overall_score.toFixed(2) : '-'}%</p>
           </div>
         </div>
 
@@ -291,10 +339,10 @@
           <h2 class="text-2xl font-bold mb-4">Monitoring Details</h2>
           <div class="bg-gray-100 p-4 space-y-2 text-sm">
             <p><strong>HTTP Status:</strong> {healthData.http_status || '-'}</p>
-            <p><strong>Latency:</strong> {healthData.latency_ms !== null ? healthData.latency_ms.toFixed(2) : '-'} ms</p>
+            <p><strong>Latency:</strong> {typeof healthData.latency_ms === 'number' ? healthData.latency_ms.toFixed(2) : '-'} ms</p>
             <p><strong>Service URL:</strong> <span class="text-blue-600 break-all">{service.service_url}</span></p>
             <p><strong>Check Type:</strong> {service.check_type}</p>
-            <p><strong>Created:</strong> {new Date(service.created_at).toLocaleString()}</p>
+            <p><strong>Created:</strong> {new Date(service.created_at).toLocaleString() || "Loading..."}</p>
           </div>
         </div>
       </div>
