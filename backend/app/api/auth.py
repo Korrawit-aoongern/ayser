@@ -4,7 +4,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
 from passlib.context import CryptContext
 import jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
 import asyncpg
 from dotenv import load_dotenv
@@ -46,7 +46,7 @@ def verify_password(pw: str, hashed: str) -> bool:
 def create_jwt(user_id: str):
     payload = {
         "sub": user_id,
-        "exp": datetime.utcnow() + timedelta(minutes=JWT_EXPIRE_MIN)
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=JWT_EXPIRE_MIN)
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
 def require_user(

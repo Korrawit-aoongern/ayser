@@ -104,7 +104,7 @@ async def update_service(service_id: int, service: ServiceUpdate, user_id=Depend
         if not existing:
             raise HTTPException(status_code=404, detail="Service not found")
         
-        update_data = service.dict(exclude_unset=True)
+        update_data = service.model_dump(exclude_unset=True)
         
         # Build dynamic update query
         set_clauses = []
