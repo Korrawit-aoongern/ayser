@@ -80,11 +80,10 @@ async def register(data: RegisterReq):
     if existing:
         raise HTTPException(400, "Email already registered")
 
-    user_id = await db.fetchval(
+    await db.execute(
         """
         INSERT INTO users (username, email, password_hash)
         VALUES ($1, $2, $3)
-        RETURNING user_id
         """,
         data.username,
         data.email,

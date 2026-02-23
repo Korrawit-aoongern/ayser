@@ -1,7 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List
 
-from httpx import request
 from ..schemas.service import ServiceCreate, ServiceUpdate, ServiceResponse
 import asyncpg
 import os

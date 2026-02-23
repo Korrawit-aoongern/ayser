@@ -1,5 +1,4 @@
 from fastapi import APIRouter, HTTPException, Depends
-from ..schemas.health import HealthCheckResult, ServiceEvent, HealthMetrics
 from .auth import require_user
 import httpx
 import time
@@ -141,7 +140,7 @@ async def check_service(service_id: int, user_id=Depends(require_user)):
             latency_ms = 10000  # Timeout threshold
             availability = "Down"
             responsiveness = "Slow"
-        except Exception as e:
+        except Exception:
             latency_ms = None
             availability = "Down"
             responsiveness = "Slow"

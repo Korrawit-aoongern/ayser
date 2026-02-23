@@ -1,4 +1,3 @@
-from fastapi import APIRouter, HTTPException
-from ..schemas.health import HealthCheckResult, HealthMetrics
+from fastapi import APIRouter
 
 router = APIRouter(prefix="/event", tags=["event"])
