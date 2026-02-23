@@ -153,3 +153,26 @@ async def delete_service(service_id: int, user_id=Depends(require_user)):
     finally:
         await db.close()
 
+
+@router.delete("")
+async def delete_all_services(user_id=Depends(require_user)):
+    """Delete all services for current user"""
+    db = await get_db()
+    try:
+        deleted_count = await db.fetchval(
+            "SELECT COUNT(*) FROM services WHERE user_id=$1",
+            user_id
+        )
+
+        await db.execute(
+            "DELETE FROM services WHERE user_id=$1",
+            user_id
+        )
+
+        return {
+            "message": "All services deleted",
+            "deleted_count": int(deleted_count or 0)
+        }
+    finally:
+        await db.close()
+

@@ -8,6 +8,8 @@
 	let services: Array<{ id: number; name: string }> = [];
 	let loading = true;
 	let error = '';
+	let username = 'Username';
+	let userLoading = false;
 
 	async function logout(e : Event) {
 		e.preventDefault();
@@ -59,16 +61,40 @@
 		}
 	}
 
+	async function loadUser() {
+		userLoading = true;
+		try {
+			const res = await fetch('/api/user', {
+				method: 'GET',
+				credentials: 'include'
+			});
+
+			if (!res.ok) return;
+			const data = await res.json();
+			username = data.username || 'Username';
+		} catch {
+			username = 'Username';
+		} finally {
+			userLoading = false;
+		}
+	}
+
 	onMount(() => {
 		if (!browser) return;
+		loadUser();
 		loadServices();
 		const handler = () => {
 			loading = true;
 			loadServices();
 		};
+		const userHandler = () => {
+			loadUser();
+		};
 		window.addEventListener('services:changed', handler);
+		window.addEventListener('user:changed', userHandler);
 		return () => {
 			window.removeEventListener('services:changed', handler);
+			window.removeEventListener('user:changed', userHandler);
 		};
 	});
 </script>
@@ -136,7 +162,7 @@
 						: ''}"
 				>
 					<span class="mr-2 h-6 w-6 rounded-full bg-gray-500"></span>
-					Username
+					{userLoading ? 'Loading...' : username}
 				</a>
 				<a
 					href="/doc"
