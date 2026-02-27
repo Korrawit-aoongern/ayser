@@ -252,7 +252,9 @@
 		</div>
 
 		<div class="mb-6">
-			<label for="retypePassword" class="mb-2 block text-sm font-semibold">Retype New Password</label>
+			<label for="retypePassword" class="mb-2 block text-sm font-semibold"
+				>Retype New Password</label
+			>
 			<input
 				type="password"
 				class="w-full rounded border border-gray-300 px-4 py-2"

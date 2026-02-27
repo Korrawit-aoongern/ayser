@@ -468,26 +468,30 @@
 					<h2 class="mb-4 text-2xl font-bold">Health Summary</h2>
 					<div class="space-y-2 bg-gray-100 p-4">
 						<p class="text-sm">
-							<strong title={detailTooltips.availability} class="cursor-help underline decoration-transparent"
-								>Availability:</strong
+							<strong
+								title={detailTooltips.availability}
+								class="cursor-help underline decoration-transparent">Availability:</strong
 							>
 							<span class={getStatusColor(healthData.availability)}>{healthData.availability}</span>
 						</p>
 						<p class="text-sm">
-							<strong title={detailTooltips.responsiveness} class="cursor-help underline decoration-transparent"
-								>Responsiveness:</strong
+							<strong
+								title={detailTooltips.responsiveness}
+								class="cursor-help underline decoration-transparent">Responsiveness:</strong
 							>
 							{healthData.responsiveness || '-'}
 						</p>
 						<p class="text-sm">
-							<strong title={detailTooltips.reliability} class="cursor-help underline decoration-transparent"
-								>Reliability:</strong
+							<strong
+								title={detailTooltips.reliability}
+								class="cursor-help underline decoration-transparent">Reliability:</strong
 							>
 							{healthData.reliability || '-'}
 						</p>
 						<p class="text-sm">
-							<strong title={detailTooltips.overallScore} class="cursor-help underline decoration-transparent"
-								>Overall Score:</strong
+							<strong
+								title={detailTooltips.overallScore}
+								class="cursor-help underline decoration-transparent">Overall Score:</strong
 							>
 							{typeof healthData.overall_score === 'number'
 								? healthData.overall_score.toFixed(2)
@@ -501,70 +505,81 @@
 					<h2 class="mb-4 text-2xl font-bold">Monitoring Details</h2>
 					<div class="space-y-2 bg-gray-100 p-4 text-sm">
 						<p>
-							<strong title={detailTooltips.httpStatus} class="cursor-help underline decoration-transparent"
-								>HTTP Status:</strong
+							<strong
+								title={detailTooltips.httpStatus}
+								class="cursor-help underline decoration-transparent">HTTP Status:</strong
 							>
 							{healthData.http_status || '-'}
 						</p>
 						<p>
-							<strong title={detailTooltips.latency} class="cursor-help underline decoration-transparent"
-								>Latency:</strong
+							<strong
+								title={detailTooltips.latency}
+								class="cursor-help underline decoration-transparent">Latency:</strong
 							>
 							{typeof healthData.latency_ms === 'number' ? healthData.latency_ms.toFixed(2) : '-'} ms
 						</p>
 						<p>
-							<strong title={detailTooltips.serviceUrl} class="cursor-help underline decoration-transparent"
-								>Service URL:</strong
+							<strong
+								title={detailTooltips.serviceUrl}
+								class="cursor-help underline decoration-transparent">Service URL:</strong
 							>
 							<span class="break-all text-blue-600">{service.service_url}</span>
 						</p>
 						<p>
-							<strong title={detailTooltips.metricsEndpoint} class="cursor-help underline decoration-transparent"
-								>Metrics Endpoint:</strong
+							<strong
+								title={detailTooltips.metricsEndpoint}
+								class="cursor-help underline decoration-transparent">Metrics Endpoint:</strong
 							>
 							{service.metrics_endpoint && service.check_type === 'url_metrics'
 								? service.metrics_endpoint
 								: '-'}
 						</p>
 						<p>
-							<strong title={detailTooltips.checkType} class="cursor-help underline decoration-transparent"
-								>Check Type:</strong
+							<strong
+								title={detailTooltips.checkType}
+								class="cursor-help underline decoration-transparent">Check Type:</strong
 							>
 							{service.check_type}
 						</p>
 						<p>
-							<strong title={detailTooltips.cpuTime} class="cursor-help underline decoration-transparent"
-								>CPU Time:</strong
+							<strong
+								title={detailTooltips.cpuTime}
+								class="cursor-help underline decoration-transparent">CPU Time:</strong
 							>
 							{formatMetric(healthData.cpu, healthData.cpu_unit)}
 						</p>
 						<p>
-							<strong title={detailTooltips.memory} class="cursor-help underline decoration-transparent"
-								>Memory:</strong
+							<strong
+								title={detailTooltips.memory}
+								class="cursor-help underline decoration-transparent">Memory:</strong
 							>
 							{formatMetric(healthData.memory, healthData.memory_unit)}
 						</p>
 						<p>
-							<strong title={detailTooltips.p50} class="cursor-help underline decoration-transparent"
-								>Latency p50:</strong
+							<strong
+								title={detailTooltips.p50}
+								class="cursor-help underline decoration-transparent">Latency p50:</strong
 							>
 							{formatMetric(healthData.p50, healthData.p50_unit)}
 						</p>
 						<p>
-							<strong title={detailTooltips.p90} class="cursor-help underline decoration-transparent"
-								>Latency p90:</strong
+							<strong
+								title={detailTooltips.p90}
+								class="cursor-help underline decoration-transparent">Latency p90:</strong
 							>
 							{formatMetric(healthData.p90, healthData.p90_unit)}
 						</p>
 						<p>
-							<strong title={detailTooltips.p99} class="cursor-help underline decoration-transparent"
-								>Latency p99:</strong
+							<strong
+								title={detailTooltips.p99}
+								class="cursor-help underline decoration-transparent">Latency p99:</strong
 							>
 							{formatMetric(healthData.p99, healthData.p99_unit)}
 						</p>
 						<p>
-							<strong title={detailTooltips.created} class="cursor-help underline decoration-transparent"
-								>Created:</strong
+							<strong
+								title={detailTooltips.created}
+								class="cursor-help underline decoration-transparent">Created:</strong
 							>
 							{new Date(service.created_at).toLocaleString() || 'Loading...'}
 						</p>
