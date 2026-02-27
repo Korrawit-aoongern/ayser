@@ -23,8 +23,12 @@
 	let checkingIds = new Set<number>();
 
 	function getStatusColor(status: string): string {
-    	return status === 'Running' ? 'text-green-600' : status === 'Down' ? 'text-red-600' : 'text-gray-600';
-  	}
+		return status === 'Running'
+			? 'text-green-600'
+			: status === 'Down'
+				? 'text-red-600'
+				: 'text-gray-600';
+	}
 
 	function toggleMenu(serviceId: number) {
 		openMenuId = openMenuId === serviceId ? null : serviceId;
