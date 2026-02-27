@@ -7,11 +7,13 @@ class ServiceCreate(BaseModel):
     service_name: str
     service_url: str
     check_type: str = "url"  # 'url' or 'url_metrics'
+    metrics_endpoint: Optional[str] = "/metrics"
 
 class ServiceUpdate(BaseModel):
     service_name: Optional[str] = None
     service_url: Optional[str] = None
     check_type: Optional[str] = None
+    metrics_endpoint: Optional[str] = None
 
 class ServiceResponse(BaseModel):
     service_id: int
@@ -19,6 +21,7 @@ class ServiceResponse(BaseModel):
     service_name: str
     service_url: str
     check_type: Optional[str] = "url"
+    metrics_endpoint: Optional[str] = "/metrics"
     availability: Optional[str] = None
     checked_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
@@ -28,6 +31,7 @@ class ServiceWithHealth(BaseModel):
     service_name: str
     service_url: str
     check_type: str
+    metrics_endpoint: Optional[str] = "/metrics"
     created_at: Optional[datetime] = None
     latest_health: Optional[dict] = None
 

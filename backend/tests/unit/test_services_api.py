@@ -121,6 +121,40 @@ async def test_create_service_returns_created_record(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_create_service_empty_metrics_endpoint_defaults_to_metrics(monkeypatch):
+    db = DummyDB(
+        fetchval_results=[11],
+        fetchrow_results=[
+            {
+                "service_id": 11,
+                "user_id": "u1",
+                "service_name": "Svc2",
+                "service_url": "https://svc2.test",
+                "check_type": "url_metrics",
+                "metrics_endpoint": "/metrics",
+                "created_at": None,
+            }
+        ],
+    )
+
+    async def fake_get_db():
+        return db
+
+    monkeypatch.setattr(services, "get_db", fake_get_db)
+
+    payload = ServiceCreate(
+        service_name="Svc2",
+        service_url="https://svc2.test",
+        check_type="url_metrics",
+        metrics_endpoint="",
+    )
+    await services.create_service(payload, user_id="u1")
+
+    insert_call = next(c for c in db.calls if c[0] == "fetchval")
+    assert insert_call[2][4] == "/metrics"
+
+
+@pytest.mark.anyio
 async def test_update_service_empty_payload_returns_current(monkeypatch):
     db = DummyDB(
         fetchrow_results=[

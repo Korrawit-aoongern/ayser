@@ -40,8 +40,17 @@ class DummyDB:
 
 
 class FakeResponse:
-    def __init__(self, status_code: int):
+    def __init__(self, status_code: int, text: str = ""):
         self.status_code = status_code
+        self.text = text
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise health.httpx.HTTPStatusError(
+                f"status={self.status_code}",
+                request=None,
+                response=None,
+            )
 
 
 class FakeAsyncClient:
@@ -96,7 +105,10 @@ async def test_get_service_health_sets_http_status_for_up(monkeypatch):
             },
         ],
         fetchval_results=[123.4],
-        fetch_results=[[{"event_id": 1, "service_id": 1, "event_level": "INFO", "event_message": "ok", "detected_at": None}]],
+        fetch_results=[
+            [{"event_id": 1, "service_id": 1, "event_level": "INFO", "event_message": "ok", "detected_at": None}],
+            [],
+        ],
     )
 
     async def fake_get_db():
@@ -163,6 +175,73 @@ async def test_check_service_timeout_records_down_and_event(monkeypatch):
     assert result["latency_ms"] == 10000
     execute_calls = [c for c in db.calls if c[0] == "execute"]
     assert len(execute_calls) >= 2
+
+
+@pytest.mark.anyio
+async def test_check_service_url_metrics_scrapes_and_inserts_metrics(monkeypatch):
+    class MetricsClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url):
+            if url.endswith("/metrics"):
+                return FakeResponse(status_code=200, text="# HELP metrics")
+            return FakeResponse(status_code=200)
+
+    db = DummyDB(
+        fetchrow_results=[
+            {
+                "service_id": 1,
+                "service_url": "https://svc.test",
+                "check_type": "url_metrics",
+                "metrics_endpoint": "/prom-metrics",
+            }
+        ],
+        fetch_results=[[]],  # recent checks
+        fetchval_results=[99],  # health_id
+        execute_results=[None] * 20,
+    )
+
+    async def fake_get_db():
+        return db
+
+    monkeypatch.setattr(health, "get_db", fake_get_db)
+    monkeypatch.setattr(health.httpx, "AsyncClient", MetricsClient)
+    monkeypatch.setattr(
+        health,
+        "extract_prometheus_metrics",
+        lambda raw: [
+            {"metric_name": "cpu", "metric_value": 10.0, "metric_unit": "seconds"},
+            {"metric_name": "memory", "metric_value": 2048.0, "metric_unit": "bytes"},
+            {"metric_name": "latency_p90", "metric_value": 125.0, "metric_unit": "ms"},
+            {"metric_name": "request_count", "metric_value": 1000.0, "metric_unit": "count"},
+            {"metric_name": "error_rate", "metric_value": 1.0, "metric_unit": "%"},
+        ],
+    )
+
+    result = await health.check_service(service_id=1, user_id="u1")
+
+    assert result["availability"] == "Up"
+    assert result["metrics_url"] == "https://svc.test/prom-metrics"
+    assert result["metrics_scraped"] == 5
+
+    inserted_metric_names = [
+        call[2][1]
+        for call in db.calls
+        if call[0] == "execute" and "INSERT INTO service_metrics" in call[1]
+    ]
+    assert "response_latency" in inserted_metric_names
+    assert "cpu" in inserted_metric_names
+    assert "memory" in inserted_metric_names
+    assert "latency_p90" in inserted_metric_names
+    assert "request_count" in inserted_metric_names
+    assert "error_rate" in inserted_metric_names
 
 
 @pytest.mark.anyio

@@ -29,7 +29,9 @@
 				body: JSON.stringify({
 					service_name: formData.serviceName,
 					service_url: formData.url,
-					check_type: toCheckType(formData.advancedMethod)
+					check_type: toCheckType(formData.advancedMethod),
+					metrics_endpoint:
+						formData.advancedMethod === 'Metrics endpoint' ? formData.metricsEndpoint : '/metrics'
 				})
 			});
 

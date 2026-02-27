@@ -55,7 +55,7 @@
 				serviceName: data.service_name ?? '',
 				url: data.service_url ?? '',
 				advancedMethod: toAdvancedMethod(data.check_type),
-				metricsEndpoint: ''
+				metricsEndpoint: data.metrics_endpoint ?? '/metrics'
 			};
 		} catch (e) {
 			error = (e as Error).message;
@@ -76,7 +76,9 @@
 				body: JSON.stringify({
 					service_name: formData.serviceName,
 					service_url: formData.url,
-					check_type: toCheckType(formData.advancedMethod)
+					check_type: toCheckType(formData.advancedMethod),
+					metrics_endpoint:
+						formData.advancedMethod === 'Metrics endpoint' ? formData.metricsEndpoint : '/metrics'
 				})
 			});
 

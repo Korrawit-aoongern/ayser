@@ -10,6 +10,7 @@
 		service_name: 'Loading...',
 		service_url: 'Loading...',
 		check_type: 'Loading...',
+		metrics_endpoint: null as string | null,
 		created_at: 'Loading...'
 	};
 
@@ -23,6 +24,16 @@
 		latency_ms: number | null;
 		http_status: number | null;
 		checked_at: string | null;
+		cpu: number | null;
+		memory: number | null;
+		p50: number | null;
+		p90: number | null;
+		p99: number | null;
+		cpu_unit: string | null;
+		memory_unit: string | null;
+		p50_unit: string | null;
+		p90_unit: string | null;
+		p99_unit: string | null;
 	} = {
 		health_id: null,
 		service_id: 0,
@@ -32,7 +43,17 @@
 		overall_score: null,
 		latency_ms: null,
 		http_status: null,
-		checked_at: 'Loading...'
+		checked_at: 'Loading...',
+		cpu: null,
+		memory: null,
+		p50: null,
+		p90: null,
+		p99: null,
+		cpu_unit: null,
+		memory_unit: null,
+		p50_unit: null,
+		p90_unit: null,
+		p99_unit: null
 	};
 
 	let events: Array<{
@@ -84,9 +105,11 @@
 				service_name: servicePayload.service_name ?? 'Unknown Service',
 				service_url: servicePayload.service_url ?? '',
 				check_type: servicePayload.check_type ?? 'url',
+				metrics_endpoint: servicePayload.metrics_endpoint ?? null,
 				created_at: servicePayload.created_at ?? new Date().toISOString()
 			};
 
+			const selectedMetrics = healthPayload.metrics ?? {};
 			healthData = {
 				health_id: healthPayload.health_id ?? null,
 				service_id: healthPayload.service_id ?? id,
@@ -96,7 +119,17 @@
 				overall_score: healthPayload.overall_score ?? null,
 				latency_ms: healthPayload.latency_ms ?? null,
 				http_status: healthPayload.http_status ?? null,
-				checked_at: healthPayload.checked_at ?? null
+				checked_at: healthPayload.checked_at ?? null,
+				cpu: selectedMetrics.cpu ?? null,
+				memory: selectedMetrics.memory ?? null,
+				p50: selectedMetrics.p50 ?? null,
+				p90: selectedMetrics.p90 ?? null,
+				p99: selectedMetrics.p99 ?? null,
+				cpu_unit: selectedMetrics.cpu_unit ?? null,
+				memory_unit: selectedMetrics.memory_unit ?? null,
+				p50_unit: selectedMetrics.p50_unit ?? null,
+				p90_unit: selectedMetrics.p90_unit ?? null,
+				p99_unit: selectedMetrics.p99_unit ?? null
 			};
 
 			events = (data?.events ?? []).map((event: any) => ({
@@ -190,7 +223,17 @@
 				overall_score: checkResult.overall_score,
 				latency_ms: checkResult.latency_ms,
 				http_status: checkResult.http_status,
-				checked_at: checkResult.checked_at
+				checked_at: checkResult.checked_at,
+				cpu: healthData.cpu,
+				memory: healthData.memory,
+				p50: healthData.p50,
+				p90: healthData.p90,
+				p99: healthData.p99,
+				cpu_unit: healthData.cpu_unit,
+				memory_unit: healthData.memory_unit,
+				p50_unit: healthData.p50_unit,
+				p90_unit: healthData.p90_unit,
+				p99_unit: healthData.p99_unit
 			};
 
 			// Reload service data to get new events
@@ -229,6 +272,59 @@
 	function getStatusColor(availability: string): string {
 		return availability === 'Up' ? 'text-green-600' : 'text-red-600';
 	}
+
+	function formatBytes(value: number | null): string {
+		if (typeof value !== 'number') return '-';
+		const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+		let size = value;
+		let unitIndex = 0;
+		while (size >= 1024 && unitIndex < units.length - 1) {
+			size /= 1024;
+			unitIndex++;
+		}
+		return `${size.toFixed(2)} ${units[unitIndex]}`;
+	}
+
+	function formatDurationSeconds(value: number | null): string {
+		if (typeof value !== 'number') return '-';
+		const totalSeconds = Math.floor(value);
+		const days = Math.floor(totalSeconds / 86400);
+		const hours = Math.floor((totalSeconds % 86400) / 3600);
+		const minutes = Math.floor((totalSeconds % 3600) / 60);
+		const seconds = totalSeconds % 60;
+		if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+		if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+		if (minutes > 0) return `${minutes}m ${seconds}s`;
+		return `${seconds}s`;
+	}
+
+	function formatMetric(value: number | null, unit: string | null): string {
+		if (typeof value !== 'number') return '-';
+		if (unit === 'bytes') return formatBytes(value);
+		if (unit === 'seconds') return formatDurationSeconds(value);
+		if (unit === 'ms') return `${value.toFixed(2)} ms`;
+		if (unit === 'count') return `${Math.round(value).toLocaleString()}`;
+		if (unit === '%') return `${value.toFixed(2)}%`;
+		return `${value.toFixed(2)}${unit ? ` ${unit}` : ''}`;
+	}
+
+	const detailTooltips = {
+		availability: 'Current reachability status from the latest health check.',
+		responsiveness: 'Speed category based on response time thresholds.',
+		reliability: 'Stability based on recent check history and uptime trend.',
+		overallScore: 'Combined health score from availability, latency, and reliability.',
+		httpStatus: 'Latest HTTP status returned by the monitored URL.',
+		latency: 'Latest measured response time for the service URL.',
+		serviceUrl: 'Base URL used for black-box health checks.',
+		metricsEndpoint: 'Path or URL used to scrape Prometheus-style metrics.',
+		checkType: 'Monitoring mode: URL-only or URL with metrics scraping.',
+		cpuTime: 'Cumulative process CPU time exposed by metrics exporter.',
+		memory: 'Latest memory metric value from exporter (formatted).',
+		p50: '50th percentile latency from scraped metrics (typical latency).',
+		p90: '90th percentile latency from scraped metrics (high latency bound).',
+		p99: '99th percentile latency from scraped metrics (tail latency).',
+		created: 'Timestamp when this service was created in Ayser.'
+	};
 
 	onMount(() => {
 		if (!browser) return;
@@ -370,16 +466,27 @@
 					<h2 class="mb-4 text-2xl font-bold">Health Summary</h2>
 					<div class="space-y-2 bg-gray-100 p-4">
 						<p class="text-sm">
-							<strong>Availability:</strong>
+							<strong title={detailTooltips.availability} class="cursor-help underline decoration-transparent"
+								>Availability:</strong
+							>
 							<span class={getStatusColor(healthData.availability)}>{healthData.availability}</span>
 						</p>
 						<p class="text-sm">
-							<strong>Responsiveness:</strong>
+							<strong title={detailTooltips.responsiveness} class="cursor-help underline decoration-transparent"
+								>Responsiveness:</strong
+							>
 							{healthData.responsiveness || '-'}
 						</p>
-						<p class="text-sm"><strong>Reliability:</strong> {healthData.reliability || '-'}</p>
 						<p class="text-sm">
-							<strong>Overall Score:</strong>
+							<strong title={detailTooltips.reliability} class="cursor-help underline decoration-transparent"
+								>Reliability:</strong
+							>
+							{healthData.reliability || '-'}
+						</p>
+						<p class="text-sm">
+							<strong title={detailTooltips.overallScore} class="cursor-help underline decoration-transparent"
+								>Overall Score:</strong
+							>
 							{typeof healthData.overall_score === 'number'
 								? healthData.overall_score.toFixed(2)
 								: '-'}%
@@ -391,18 +498,72 @@
 				<div>
 					<h2 class="mb-4 text-2xl font-bold">Monitoring Details</h2>
 					<div class="space-y-2 bg-gray-100 p-4 text-sm">
-						<p><strong>HTTP Status:</strong> {healthData.http_status || '-'}</p>
 						<p>
-							<strong>Latency:</strong>
+							<strong title={detailTooltips.httpStatus} class="cursor-help underline decoration-transparent"
+								>HTTP Status:</strong
+							>
+							{healthData.http_status || '-'}
+						</p>
+						<p>
+							<strong title={detailTooltips.latency} class="cursor-help underline decoration-transparent"
+								>Latency:</strong
+							>
 							{typeof healthData.latency_ms === 'number' ? healthData.latency_ms.toFixed(2) : '-'} ms
 						</p>
 						<p>
-							<strong>Service URL:</strong>
+							<strong title={detailTooltips.serviceUrl} class="cursor-help underline decoration-transparent"
+								>Service URL:</strong
+							>
 							<span class="break-all text-blue-600">{service.service_url}</span>
 						</p>
-						<p><strong>Check Type:</strong> {service.check_type}</p>
 						<p>
-							<strong>Created:</strong>
+							<strong title={detailTooltips.metricsEndpoint} class="cursor-help underline decoration-transparent"
+								>Metrics Endpoint:</strong
+							>
+							{service.metrics_endpoint && service.check_type === 'url_metrics'
+								? service.metrics_endpoint
+								: '-'}
+						</p>
+						<p>
+							<strong title={detailTooltips.checkType} class="cursor-help underline decoration-transparent"
+								>Check Type:</strong
+							>
+							{service.check_type}
+						</p>
+						<p>
+							<strong title={detailTooltips.cpuTime} class="cursor-help underline decoration-transparent"
+								>CPU Time:</strong
+							>
+							{formatMetric(healthData.cpu, healthData.cpu_unit)}
+						</p>
+						<p>
+							<strong title={detailTooltips.memory} class="cursor-help underline decoration-transparent"
+								>Memory:</strong
+							>
+							{formatMetric(healthData.memory, healthData.memory_unit)}
+						</p>
+						<p>
+							<strong title={detailTooltips.p50} class="cursor-help underline decoration-transparent"
+								>Latency p50:</strong
+							>
+							{formatMetric(healthData.p50, healthData.p50_unit)}
+						</p>
+						<p>
+							<strong title={detailTooltips.p90} class="cursor-help underline decoration-transparent"
+								>Latency p90:</strong
+							>
+							{formatMetric(healthData.p90, healthData.p90_unit)}
+						</p>
+						<p>
+							<strong title={detailTooltips.p99} class="cursor-help underline decoration-transparent"
+								>Latency p99:</strong
+							>
+							{formatMetric(healthData.p99, healthData.p99_unit)}
+						</p>
+						<p>
+							<strong title={detailTooltips.created} class="cursor-help underline decoration-transparent"
+								>Created:</strong
+							>
 							{new Date(service.created_at).toLocaleString() || 'Loading...'}
 						</p>
 					</div>

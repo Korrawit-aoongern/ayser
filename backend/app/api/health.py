@@ -5,6 +5,7 @@ import time
 import os
 import asyncpg
 from datetime import datetime, timezone
+from .metrics import build_metrics_url, extract_prometheus_metrics
 
 
 router = APIRouter(prefix="/health", tags=["health"])
@@ -20,10 +21,18 @@ async def get_service_health(service_id: int, user_id=Depends(require_user)):
     """Get service health data and recent events"""
     db = await get_db()
     try:
-        service = await db.fetchrow(
-            "SELECT service_id, service_name, service_url, check_type, created_at FROM services WHERE service_id=$1 AND user_id=$2",
-            service_id, user_id
-        )
+        try:
+            service = await db.fetchrow(
+                "SELECT service_id, service_name, service_url, check_type, metrics_endpoint, created_at FROM services WHERE service_id=$1 AND user_id=$2",
+                service_id, user_id
+            )
+        except asyncpg.UndefinedColumnError:
+            service = await db.fetchrow(
+                "SELECT service_id, service_name, service_url, check_type, created_at FROM services WHERE service_id=$1 AND user_id=$2",
+                service_id, user_id
+            )
+            if service:
+                service = {**dict(service), "metrics_endpoint": None}
 
         if not service:
             raise HTTPException(status_code=404, detail="Service not found")
@@ -72,6 +81,26 @@ async def get_service_health(service_id: int, user_id=Depends(require_user)):
             service_id
         )
 
+        latest_selected_metrics = await db.fetch(
+            """
+            SELECT t.metric_name, t.metric_value, t.metric_unit
+            FROM (
+                SELECT
+                    metric_name,
+                    metric_value,
+                    metric_unit,
+                    ROW_NUMBER() OVER (PARTITION BY metric_name ORDER BY collected_at DESC) AS rn
+                FROM service_metrics
+                WHERE service_id=$1 AND metric_name = ANY($2::text[])
+            ) t
+            WHERE t.rn = 1
+            """,
+            service_id,
+            ["cpu", "memory", "latency_p50", "latency_p90", "latency_p99"]
+        )
+
+        metric_map = {row["metric_name"]: row for row in latest_selected_metrics}
+
         health_payload = dict(health) if health else {
             "health_id": None,
             "service_id": service_id,
@@ -83,6 +112,18 @@ async def get_service_health(service_id: int, user_id=Depends(require_user)):
         }
         health_payload["latency_ms"] = float(latest_latency) if latest_latency is not None else None
         health_payload["http_status"] = http_status
+        health_payload["metrics"] = {
+            "cpu": float(metric_map["cpu"]["metric_value"]) if "cpu" in metric_map else None,
+            "memory": float(metric_map["memory"]["metric_value"]) if "memory" in metric_map else None,
+            "p50": float(metric_map["latency_p50"]["metric_value"]) if "latency_p50" in metric_map else None,
+            "p90": float(metric_map["latency_p90"]["metric_value"]) if "latency_p90" in metric_map else None,
+            "p99": float(metric_map["latency_p99"]["metric_value"]) if "latency_p99" in metric_map else None,
+            "cpu_unit": metric_map["cpu"]["metric_unit"] if "cpu" in metric_map else None,
+            "memory_unit": metric_map["memory"]["metric_unit"] if "memory" in metric_map else None,
+            "p50_unit": metric_map["latency_p50"]["metric_unit"] if "latency_p50" in metric_map else None,
+            "p90_unit": metric_map["latency_p90"]["metric_unit"] if "latency_p90" in metric_map else None,
+            "p99_unit": metric_map["latency_p99"]["metric_unit"] if "latency_p99" in metric_map else None,
+        }
 
         return {
             "service": {
@@ -90,6 +131,7 @@ async def get_service_health(service_id: int, user_id=Depends(require_user)):
                 "service_name": service["service_name"],
                 "service_url": service["service_url"],
                 "check_type": service["check_type"],
+                "metrics_endpoint": service.get("metrics_endpoint") if isinstance(service, dict) else service["metrics_endpoint"],
                 "created_at": service["created_at"]
             },
             "health": health_payload,
@@ -102,12 +144,21 @@ async def get_service_health(service_id: int, user_id=Depends(require_user)):
 @router.post("/services/{service_id}/check")
 async def check_service(service_id: int, user_id=Depends(require_user)):
     """Perform black box monitoring check on service"""
+
     db = await get_db()
     try:
-        service = await db.fetchrow(
-            "SELECT service_id, service_url, check_type FROM services WHERE service_id=$1 AND user_id=$2",
-            service_id, user_id
-        )
+        try:
+            service = await db.fetchrow(
+                "SELECT service_id, service_url, check_type, metrics_endpoint FROM services WHERE service_id=$1 AND user_id=$2",
+                service_id, user_id
+            )
+        except asyncpg.UndefinedColumnError:
+            service = await db.fetchrow(
+                "SELECT service_id, service_url, check_type FROM services WHERE service_id=$1 AND user_id=$2",
+                service_id, user_id
+            )
+            if service:
+                service = {**dict(service), "metrics_endpoint": "/metrics"}
 
         if not service:
             raise HTTPException(status_code=404, detail="Service not found")
@@ -118,6 +169,8 @@ async def check_service(service_id: int, user_id=Depends(require_user)):
         reliability = "Unstable"
         http_status = None
         latency_ms = None
+        metrics_scraped = 0
+        metrics_url = None
 
         # Black box check - measure response time and status
         start = time.perf_counter()
@@ -229,6 +282,39 @@ async def check_service(service_id: int, user_id=Depends(require_user)):
                 "ms"
             )
 
+        if service["check_type"] == "url_metrics" and availability == "Up":
+            try:
+                metrics_url = build_metrics_url(url, service["metrics_endpoint"])
+                async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+                    metrics_response = await client.get(metrics_url)
+                    metrics_response.raise_for_status()
+
+                parsed_metrics = extract_prometheus_metrics(metrics_response.text)
+                for metric in parsed_metrics:
+                    await db.execute(
+                        """
+                        INSERT INTO service_metrics
+                        (service_id, metric_name, metric_value, metric_unit)
+                        VALUES ($1, $2, $3, $4)
+                        """,
+                        service_id,
+                        metric["metric_name"],
+                        metric["metric_value"],
+                        metric["metric_unit"],
+                    )
+                metrics_scraped = len(parsed_metrics)
+            except Exception as exc:
+                await db.execute(
+                    """
+                    INSERT INTO service_events
+                    (service_id, event_level, event_message)
+                    VALUES ($1, $2, $3)
+                    """,
+                    service_id,
+                    "WARNING",
+                    f"Metrics scrape failed: {str(exc)[:180]}",
+                )
+
         return {
             "health_id": health_id,
             "service_id": service_id,
@@ -238,6 +324,8 @@ async def check_service(service_id: int, user_id=Depends(require_user)):
             "latency_ms": latency_ms,
             "http_status": http_status,
             "overall_score": overall_score,
+            "metrics_url": metrics_url,
+            "metrics_scraped": metrics_scraped,
             "checked_at": datetime.now(timezone.utc).isoformat()
         }
 
