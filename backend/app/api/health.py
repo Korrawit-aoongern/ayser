@@ -5,7 +5,6 @@ import time
 import os
 import asyncpg
 from datetime import datetime, timezone
-from .metrics import build_metrics_url, extract_prometheus_metrics
 
 
 router = APIRouter(prefix="/health", tags=["health"])
@@ -147,18 +146,10 @@ async def check_service(service_id: int, user_id=Depends(require_user)):
 
     db = await get_db()
     try:
-        try:
-            service = await db.fetchrow(
-                "SELECT service_id, service_url, check_type, metrics_endpoint FROM services WHERE service_id=$1 AND user_id=$2",
-                service_id, user_id
-            )
-        except asyncpg.UndefinedColumnError:
-            service = await db.fetchrow(
-                "SELECT service_id, service_url, check_type FROM services WHERE service_id=$1 AND user_id=$2",
-                service_id, user_id
-            )
-            if service:
-                service = {**dict(service), "metrics_endpoint": "/metrics"}
+        service = await db.fetchrow(
+            "SELECT service_id, service_url, check_type FROM services WHERE service_id=$1 AND user_id=$2",
+            service_id, user_id
+        )
 
         if not service:
             raise HTTPException(status_code=404, detail="Service not found")
@@ -169,8 +160,6 @@ async def check_service(service_id: int, user_id=Depends(require_user)):
         reliability = "Unstable"
         http_status = None
         latency_ms = None
-        metrics_scraped = 0
-        metrics_url = None
 
         # Black box check - measure response time and status
         start = time.perf_counter()
@@ -282,39 +271,6 @@ async def check_service(service_id: int, user_id=Depends(require_user)):
                 "ms"
             )
 
-        if service["check_type"] == "url_metrics" and availability == "Up":
-            try:
-                metrics_url = build_metrics_url(url, service["metrics_endpoint"])
-                async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
-                    metrics_response = await client.get(metrics_url)
-                    metrics_response.raise_for_status()
-
-                parsed_metrics = extract_prometheus_metrics(metrics_response.text)
-                for metric in parsed_metrics:
-                    await db.execute(
-                        """
-                        INSERT INTO service_metrics
-                        (service_id, metric_name, metric_value, metric_unit)
-                        VALUES ($1, $2, $3, $4)
-                        """,
-                        service_id,
-                        metric["metric_name"],
-                        metric["metric_value"],
-                        metric["metric_unit"],
-                    )
-                metrics_scraped = len(parsed_metrics)
-            except Exception as exc:
-                await db.execute(
-                    """
-                    INSERT INTO service_events
-                    (service_id, event_level, event_message)
-                    VALUES ($1, $2, $3)
-                    """,
-                    service_id,
-                    "WARNING",
-                    f"Metrics scrape failed: {str(exc)[:180]}",
-                )
-
         return {
             "health_id": health_id,
             "service_id": service_id,
@@ -324,8 +280,6 @@ async def check_service(service_id: int, user_id=Depends(require_user)):
             "latency_ms": latency_ms,
             "http_status": http_status,
             "overall_score": overall_score,
-            "metrics_url": metrics_url,
-            "metrics_scraped": metrics_scraped,
             "checked_at": datetime.now(timezone.utc).isoformat()
         }
 
@@ -361,4 +315,3 @@ async def get_service_health_history(service_id: int, limit: int = 100, user_id=
         return [dict(h) for h in history]
     finally:
         await db.close()
-

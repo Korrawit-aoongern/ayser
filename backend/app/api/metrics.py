@@ -1,8 +1,27 @@
+from fastapi import APIRouter, Depends, HTTPException
+import asyncpg
+import os
+import httpx
 from urllib.parse import urlsplit, urlunsplit
 try:
     from prometheus_client.parser import text_string_to_metric_families
 except Exception:  # pragma: no cover - fallback for environments without dependency
     text_string_to_metric_families = None
+from .auth import require_user
+
+router = APIRouter(prefix="/metrics", tags=["metrics"])
+
+
+async def get_db():
+    return await asyncpg.connect(os.getenv("DATABASE_URL"), statement_cache_size=0)
+
+
+def _normalize_path(path: str) -> str:
+    segments = [segment for segment in (path or "").split("/") if segment]
+    if not segments:
+        return "/metrics"
+    return "/" + "/".join(segments)
+
 
 def build_metrics_url(service_url: str, metrics_endpoint: str = "/metrics") -> str:
     endpoint = (metrics_endpoint or "/metrics").strip()
@@ -10,10 +29,20 @@ def build_metrics_url(service_url: str, metrics_endpoint: str = "/metrics") -> s
         endpoint = "/metrics"
 
     if endpoint.startswith("http://") or endpoint.startswith("https://"):
-        return endpoint
+        parsed_endpoint = urlsplit(endpoint)
+        normalized_endpoint_path = _normalize_path(parsed_endpoint.path)
+        return urlunsplit(
+            (
+                parsed_endpoint.scheme,
+                parsed_endpoint.netloc,
+                normalized_endpoint_path,
+                "",
+                "",
+            )
+        )
 
     parsed = urlsplit(service_url.strip())
-    endpoint_path = endpoint if endpoint.startswith("/") else f"/{endpoint}"
+    endpoint_path = _normalize_path(endpoint if endpoint.startswith("/") else f"/{endpoint}")
     return urlunsplit((parsed.scheme, parsed.netloc, endpoint_path, "", ""))
 
 
@@ -145,3 +174,92 @@ def extract_prometheus_metrics(raw_metrics: str):
         {"metric_name": name, "metric_value": value, "metric_unit": unit}
         for name, (value, unit) in selected.items()
     ]
+
+
+async def _fetch_service_for_scrape(db, service_id: int, user_id):
+    try:
+        service = await db.fetchrow(
+            "SELECT service_id, service_url, check_type, metrics_endpoint FROM services WHERE service_id=$1 AND user_id=$2",
+            service_id,
+            user_id,
+        )
+    except asyncpg.UndefinedColumnError:
+        service = await db.fetchrow(
+            "SELECT service_id, service_url, check_type FROM services WHERE service_id=$1 AND user_id=$2",
+            service_id,
+            user_id,
+        )
+        if service:
+            service = {**dict(service), "metrics_endpoint": "/metrics"}
+
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found")
+
+    return dict(service) if not isinstance(service, dict) else service
+
+
+@router.post("/services/{service_id}/scrape")
+async def scrape_service_metrics(service_id: int, user_id=Depends(require_user)):
+    """Scrape Prometheus metrics for url_metrics services and store selected metrics."""
+    db = await get_db()
+    try:
+        service = await _fetch_service_for_scrape(db, service_id, user_id)
+
+        if service["check_type"] != "url_metrics":
+            return {
+                "service_id": service_id,
+                "scraped": False,
+                "skipped": True,
+                "reason": "check_type is not url_metrics",
+                "metrics_url": None,
+                "metrics_scraped": 0,
+            }
+
+        metrics_url = build_metrics_url(service["service_url"], service.get("metrics_endpoint"))
+        try:
+            async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+                metrics_response = await client.get(metrics_url)
+                metrics_response.raise_for_status()
+
+            parsed_metrics = extract_prometheus_metrics(metrics_response.text)
+            for metric in parsed_metrics:
+                await db.execute(
+                    """
+                    INSERT INTO service_metrics
+                    (service_id, metric_name, metric_value, metric_unit)
+                    VALUES ($1, $2, $3, $4)
+                    """,
+                    service_id,
+                    metric["metric_name"],
+                    metric["metric_value"],
+                    metric["metric_unit"],
+                )
+
+            return {
+                "service_id": service_id,
+                "scraped": True,
+                "skipped": False,
+                "metrics_url": metrics_url,
+                "metrics_scraped": len(parsed_metrics),
+            }
+        except Exception as exc:
+            await db.execute(
+                """
+                INSERT INTO service_events
+                (service_id, event_level, event_message)
+                VALUES ($1, $2, $3)
+                """,
+                service_id,
+                "WARNING",
+                f"Metrics scrape failed: {str(exc)[:180]}",
+            )
+            return {
+                "service_id": service_id,
+                "scraped": False,
+                "skipped": False,
+                "metrics_url": metrics_url,
+                "metrics_scraped": 0,
+                "error": str(exc)[:180],
+            }
+    finally:
+        await db.close()

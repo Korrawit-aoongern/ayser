@@ -204,14 +204,16 @@
 		error = '';
 
 		try {
-			const res = await fetch(`/api/health/services/${serviceId}/check`, {
+			const res = await fetch(`/api/monitor/services/${serviceId}/check`, {
 				method: 'POST',
 				credentials: 'include'
 			});
 
-			if (!res.ok) throw new Error('Health check failed');
+			if (!res.ok) throw new Error('Monitoring check failed');
 
-			const checkResult = await res.json();
+			const monitorResult = await res.json();
+			const checkResult = monitorResult?.blackbox ?? null;
+			if (!checkResult) throw new Error('Monitoring check returned invalid response');
 
 			// Update health data with check result
 			healthData = {

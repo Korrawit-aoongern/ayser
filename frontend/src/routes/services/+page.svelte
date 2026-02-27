@@ -94,14 +94,16 @@
 		if (checkingIds.has(serviceId)) return;
 		checkingIds = new Set(checkingIds).add(serviceId);
 		try {
-			const res = await fetch(`/api/health/services/${serviceId}/check`, {
+			const res = await fetch(`/api/monitor/services/${serviceId}/check`, {
 				method: 'POST',
 				credentials: 'include'
 			});
 
-			if (!res.ok) throw new Error(`Health check failed (${res.status})`);
+			if (!res.ok) throw new Error(`Monitoring check failed (${res.status})`);
 
-			const checkResult = await res.json();
+			const monitorResult = await res.json();
+			const checkResult = monitorResult?.blackbox ?? null;
+			if (!checkResult) throw new Error('Monitoring check returned invalid response');
 			services = services.map((s: any) =>
 				s.id === serviceId
 					? {
