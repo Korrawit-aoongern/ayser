@@ -1,17 +1,17 @@
-from fastapi import APIRouter, HTTPException, Response, Depends
+from fastapi import APIRouter, HTTPException, Response, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from pydantic import BaseModel, EmailStr
 from passlib.context import CryptContext
 import jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
 import asyncpg
 from dotenv import load_dotenv
 import hashlib
 
 load_dotenv()
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -46,13 +46,16 @@ def verify_password(pw: str, hashed: str) -> bool:
 def create_jwt(user_id: str):
     payload = {
         "sub": user_id,
-        "exp": datetime.utcnow() + timedelta(minutes=JWT_EXPIRE_MIN)
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=JWT_EXPIRE_MIN)
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
 def require_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(security)
 ):
-    token = credentials.credentials
+    token = credentials.credentials if credentials else request.cookies.get("access_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
 
     try:
         payload = jwt.decode(
@@ -77,11 +80,10 @@ async def register(data: RegisterReq):
     if existing:
         raise HTTPException(400, "Email already registered")
 
-    user_id = await db.fetchval(
+    await db.execute(
         """
         INSERT INTO users (username, email, password_hash)
         VALUES ($1, $2, $3)
-        RETURNING user_id
         """,
         data.username,
         data.email,
@@ -124,7 +126,7 @@ async def logout(response: Response):
     response.delete_cookie(
         key="access_token",
         httponly=True,
-        secure=True,
+        secure=False,
         samesite="lax"
     )
     return {"message": "Logout successful"}

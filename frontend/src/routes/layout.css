@@ -1,3 +1,36 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/forms';
 @plugin '@tailwindcss/typography';
+
+/* Common scrollbar style used across app panels. */
+.app-scroll {
+	scrollbar-width: thin;
+	scrollbar-color: #9ca3af #e5e7eb;
+	scrollbar-gutter: stable;
+}
+
+.app-scroll::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+
+.app-scroll::-webkit-scrollbar-track {
+	background: #e5e7eb;
+	border-radius: 9999px;
+}
+
+.app-scroll::-webkit-scrollbar-thumb {
+	background: #9ca3af;
+	border: 2px solid #e5e7eb;
+	border-radius: 9999px;
+}
+
+.app-scroll::-webkit-scrollbar-thumb:hover {
+	background: #6b7280;
+}
+
+/* Keep scrollbar outside content flow so item widths do not visually shrink. */
+.app-scroll-overlay {
+	margin-right: -15px;
+	padding-right: 5px;
+}
