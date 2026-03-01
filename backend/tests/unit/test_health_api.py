@@ -157,7 +157,7 @@ async def test_check_service_timeout_records_down_and_event(monkeypatch):
 
     db = DummyDB(
         fetchrow_results=[{"service_id": 1, "service_url": "https://svc.test", "check_type": "url"}],
-        fetch_results=[[]],  # recent checks
+        fetch_results=[[], []],  # recent checks + latest metrics snapshot
         fetchval_results=[77],  # health_id
         execute_results=[None, None],  # service_events insert + metrics insert
     )
@@ -173,6 +173,7 @@ async def test_check_service_timeout_records_down_and_event(monkeypatch):
     assert result["availability"] == "Down"
     assert result["overall_score"] == 0
     assert result["latency_ms"] == 10000
+    assert result["score_breakdown"]["availability"] == 0
     execute_calls = [c for c in db.calls if c[0] == "execute"]
     assert len(execute_calls) >= 2
 

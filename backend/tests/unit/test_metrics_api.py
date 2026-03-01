@@ -68,6 +68,32 @@ def test_build_metrics_url_defaults_to_metrics_for_empty_endpoint():
     assert url == "https://svc.test/metrics"
 
 
+def test_evaluate_scraped_metrics_healthy_when_no_risky_signals():
+    evaluation = metrics.evaluate_scraped_metrics(
+        [
+            {"metric_name": "latency_p90", "metric_value": 120.0, "metric_unit": "ms"},
+            {"metric_name": "error_rate", "metric_value": 1.0, "metric_unit": "%"},
+        ]
+    )
+    assert evaluation["status"] == "Healthy"
+    assert evaluation["score"] == 100.0
+    assert evaluation["findings"] == []
+
+
+def test_evaluate_scraped_metrics_critical_when_multiple_thresholds_breach():
+    evaluation = metrics.evaluate_scraped_metrics(
+        [
+            {"metric_name": "latency_p90", "metric_value": 2100.0, "metric_unit": "ms"},
+            {"metric_name": "latency_p99", "metric_value": 3.2, "metric_unit": "seconds"},
+            {"metric_name": "error_rate", "metric_value": 12.0, "metric_unit": "%"},
+        ]
+    )
+    assert evaluation["status"] == "Critical"
+    assert evaluation["score"] == 15.0
+    assert "p90 latency above 2000ms" in evaluation["findings"]
+    assert "error rate above 10%" in evaluation["findings"]
+
+
 @pytest.mark.anyio
 async def test_scrape_service_metrics_not_found_raises_404(monkeypatch):
     db = DummyDB(fetchrow_results=[None])
@@ -150,6 +176,7 @@ async def test_scrape_service_metrics_inserts_selected_metrics(monkeypatch):
     assert result["scraped"] is True
     assert result["metrics_url"] == "https://svc.test/prom-metrics"
     assert result["metrics_scraped"] == 3
+    assert result["evaluation"]["status"] == "Healthy"
 
     inserted_metric_names = [
         call[2][1]

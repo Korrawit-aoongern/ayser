@@ -176,6 +176,87 @@ def extract_prometheus_metrics(raw_metrics: str):
     ]
 
 
+def _normalize_to_ms(value: float, unit: str | None) -> float:
+    normalized_unit = (unit or "").lower()
+    if normalized_unit in {"s", "sec", "second", "seconds"}:
+        return value * 1000.0
+    return value
+
+
+def _normalize_to_percent(value: float, unit: str | None) -> float:
+    normalized_unit = (unit or "").lower()
+    if normalized_unit == "ratio":
+        return value * 100.0
+    return value
+
+
+def evaluate_scraped_metrics(parsed_metrics: list[dict]) -> dict:
+    if not parsed_metrics:
+        return {"score": None, "status": "Unknown", "findings": []}
+
+    metric_map = {m["metric_name"]: m for m in parsed_metrics}
+    findings = []
+    penalty = 0.0
+
+    p90 = metric_map.get("latency_p90")
+    if p90:
+        p90_ms = _normalize_to_ms(float(p90["metric_value"]), p90.get("metric_unit"))
+        if p90_ms > 2000:
+            penalty += 25
+            findings.append("p90 latency above 2000ms")
+        elif p90_ms > 1000:
+            penalty += 15
+            findings.append("p90 latency above 1000ms")
+        elif p90_ms > 500:
+            penalty += 8
+            findings.append("p90 latency above 500ms")
+
+    p99 = metric_map.get("latency_p99")
+    if p99:
+        p99_ms = _normalize_to_ms(float(p99["metric_value"]), p99.get("metric_unit"))
+        if p99_ms > 3000:
+            penalty += 20
+            findings.append("p99 latency above 3000ms")
+        elif p99_ms > 1500:
+            penalty += 10
+            findings.append("p99 latency above 1500ms")
+
+    error_rate = metric_map.get("error_rate")
+    if error_rate:
+        error_rate_pct = _normalize_to_percent(
+            float(error_rate["metric_value"]), error_rate.get("metric_unit")
+        )
+        if error_rate_pct > 10:
+            penalty += 40
+            findings.append("error rate above 10%")
+        elif error_rate_pct > 5:
+            penalty += 25
+            findings.append("error rate above 5%")
+        elif error_rate_pct > 2:
+            penalty += 10
+            findings.append("error rate above 2%")
+
+    cpu = metric_map.get("cpu")
+    if cpu and str(cpu.get("metric_unit", "")).lower() in {"%", "percent"}:
+        cpu_pct = float(cpu["metric_value"])
+        if cpu_pct > 90:
+            penalty += 20
+            findings.append("cpu usage above 90%")
+        elif cpu_pct > 80:
+            penalty += 10
+            findings.append("cpu usage above 80%")
+
+    score = round(max(0.0, 100.0 - penalty), 2)
+    if score >= 85:
+        status = "Healthy"
+    elif score >= 70:
+        status = "Degraded"
+    else:
+        status = "Critical"
+
+    return {"score": score, "status": status, "findings": findings}
+
+
 async def _fetch_service_for_scrape(db, service_id: int, user_id):
     try:
         service = await db.fetchrow(
@@ -235,12 +316,27 @@ async def scrape_service_metrics(service_id: int, user_id=Depends(require_user))
                     metric["metric_unit"],
                 )
 
+            evaluation = evaluate_scraped_metrics(parsed_metrics)
+            if evaluation["status"] in {"Degraded", "Critical"}:
+                findings_text = ", ".join(evaluation["findings"][:2]) or "metrics indicate elevated risk"
+                await db.execute(
+                    """
+                    INSERT INTO service_events
+                    (service_id, event_level, event_message)
+                    VALUES ($1, $2, $3)
+                    """,
+                    service_id,
+                    "WARNING",
+                    f"Metrics health is {evaluation['status'].lower()} (score={evaluation['score']}, {findings_text})",
+                )
+
             return {
                 "service_id": service_id,
                 "scraped": True,
                 "skipped": False,
                 "metrics_url": metrics_url,
                 "metrics_scraped": len(parsed_metrics),
+                "evaluation": evaluation,
             }
         except Exception as exc:
             await db.execute(
