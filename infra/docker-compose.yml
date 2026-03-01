@@ -10,6 +10,7 @@ services:
       - ../backend/.env
     environment:
       - APP_ENV=dev
+      - ML_SERVICE_URL=http://ml:8010
     volumes:
       - ../backend/app:/app/app
       - ../backend/.env:/app/.env
@@ -19,6 +20,18 @@ services:
     dns:
       - 8.8.8.8
       - 1.1.1.1
+
+  ml:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.ml
+    container_name: ayser-ml
+    ports:
+      - "8010:8010"
+    volumes:
+      - ../services/ml/app:/app/app
+    networks:
+      - ayser-network
 
   frontend:
     build:
