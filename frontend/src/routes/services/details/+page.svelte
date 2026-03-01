@@ -444,7 +444,9 @@
 				<!-- Health Narrative (Events) -->
 				<div class="mb-8">
 					<h2 class="mb-4 text-2xl font-bold">Health Events</h2>
-					<div class="max-h-96 space-y-4 overflow-y-auto rounded bg-gray-200 p-6">
+					<div
+						class="app-scroll h-80 space-y-4 overflow-x-hidden overflow-y-auto rounded bg-gray-200 p-6"
+					>
 						{#if events.length === 0}
 							<p class="text-sm text-gray-600">No events recorded yet.</p>
 						{:else}
@@ -453,7 +455,7 @@
 									<p class="text-sm font-semibold">
 										[{event.event_level}] {formatTime(event.detected_at)}
 									</p>
-									<p class="text-sm text-gray-700">{event.event_message}</p>
+									<p class="text-sm break-words text-gray-700">{event.event_message}</p>
 								</div>
 							{/each}
 						{/if}

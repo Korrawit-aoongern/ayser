@@ -100,16 +100,16 @@
 </script>
 
 <!-- Left Sidebar -->
-<aside class="flex w-48 flex-col bg-gray-200">
+<aside class="flex h-full min-h-0 w-48 flex-col bg-gray-200">
 	<!-- Service Section -->
-	<div class="flex-1">
+	<div class="flex min-h-0 flex-1 flex-col">
 		<div class="p-1">
 			<a href="/">
 				<img src={AyserIcon} alt="Ayser Logo" class="mx-auto h-max w-max" />
 			</a>
 		</div>
 
-		<nav class="space-y-2 p-4">
+		<nav class="flex min-h-0 flex-1 flex-col gap-2 p-4">
 			<div class="mb-3 text-sm text-gray-600">Service</div>
 			<a
 				href="/services"
@@ -120,24 +120,6 @@
 			>
 				All Services
 			</a>
-			{#if loading}
-				<div class="px-4 py-2 text-sm text-gray-500">Loading...</div>
-			{:else if error}
-				<div class="px-4 py-2 text-sm text-red-600">Failed to load</div>
-			{:else}
-				{#each services as service}
-					<a
-						href={`/services/details?id=${service.id}`}
-						class="block w-full rounded-xl bg-gray-300 px-4 py-3 text-center text-sm hover:bg-gray-400 {$page
-							.url.pathname === '/services/details' &&
-						$page.url.searchParams.get('id') === String(service.id)
-							? 'bg-gray-400 font-bold'
-							: ''}"
-					>
-						{service.name}
-					</a>
-				{/each}
-			{/if}
 			<a
 				href="/services/new"
 				class="block w-full rounded-xl bg-gray-300 px-4 py-3 text-center text-sm hover:bg-gray-400 {$page
@@ -147,6 +129,26 @@
 			>
 				+ New Service
 			</a>
+			<div class="app-scroll app-scroll-overlay min-h-0 flex-1 space-y-2 overflow-y-auto">
+				{#if loading}
+					<div class="px-4 py-2 text-sm text-gray-500">Loading...</div>
+				{:else if error}
+					<div class="px-4 py-2 text-sm text-red-600">Failed to load</div>
+				{:else}
+					{#each services as service}
+						<a
+							href={`/services/details?id=${service.id}`}
+							class="block w-full rounded-xl bg-gray-300 px-4 py-3 text-center text-sm hover:bg-gray-400 {$page
+								.url.pathname === '/services/details' &&
+							$page.url.searchParams.get('id') === String(service.id)
+								? 'bg-gray-400 font-bold'
+								: ''}"
+						>
+							{service.name}
+						</a>
+					{/each}
+				{/if}
+			</div>
 		</nav>
 	</div>
 

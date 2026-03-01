@@ -24,6 +24,25 @@
 		return method === 'Metrics endpoint' ? 'url_metrics' : 'url';
 	}
 
+	function validateForm() {
+		const serviceName = formData.serviceName.trim();
+		const url = formData.url.trim();
+		const useMetricsEndpoint = formData.advancedMethod === 'Metrics endpoint';
+		const metricsEndpoint =
+			(useMetricsEndpoint ? formData.metricsEndpoint : '/metrics').trim() || '/metrics';
+
+		if (!serviceName) return 'Service name is required.';
+		if (serviceName.length > 30) return 'Service name must be at most 30 characters.';
+		if (!url) return 'URL is required.';
+		if (url.length > 50) return 'URL must be at most 50 characters.';
+		if (useMetricsEndpoint) {
+			if (metricsEndpoint.length > 50) return '/metrics endpoint must be at most 50 characters.';
+			if (!metricsEndpoint.startsWith('/')) return '/metrics endpoint must start with "/".';
+		}
+
+		return null;
+	}
+
 	// Load service data based on ID
 	$: if (browser) {
 		const rawId = $page.url.searchParams.get('id');
@@ -69,16 +88,26 @@
 		loading = true;
 		error = '';
 		try {
+			const validationError = validateForm();
+			if (validationError) throw new Error(validationError);
+
+			const serviceName = formData.serviceName.trim();
+			const url = formData.url.trim();
+			const metricsEndpoint =
+				(formData.advancedMethod === 'Metrics endpoint'
+					? formData.metricsEndpoint
+					: '/metrics'
+				).trim() || '/metrics';
+
 			const res = await fetch(`/api/services/${serviceId}`, {
 				method: 'PUT',
 				credentials: 'include',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
-					service_name: formData.serviceName,
-					service_url: formData.url,
+					service_name: serviceName,
+					service_url: url,
 					check_type: toCheckType(formData.advancedMethod),
-					metrics_endpoint:
-						formData.advancedMethod === 'Metrics endpoint' ? formData.metricsEndpoint : '/metrics'
+					metrics_endpoint: metricsEndpoint
 				})
 			});
 
@@ -108,6 +137,7 @@
 				type="text"
 				class="w-full rounded border border-gray-300 px-4 py-2"
 				bind:value={formData.serviceName}
+				maxlength="30"
 				disabled={loading}
 			/>
 		</div>
@@ -118,6 +148,7 @@
 				type="text"
 				class="w-full rounded border border-gray-300 px-4 py-2"
 				bind:value={formData.url}
+				maxlength="50"
 				disabled={loading}
 			/>
 		</div>
@@ -146,6 +177,8 @@
 					placeholder="Enter your /metrics endpoint URL (ex. /metrics)"
 					class="w-full rounded border border-gray-300 px-4 py-2"
 					bind:value={formData.metricsEndpoint}
+					maxlength="50"
+					pattern="\/.*"
 					disabled={loading}
 				/>
 			</div>

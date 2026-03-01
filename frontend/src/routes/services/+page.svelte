@@ -189,71 +189,73 @@
 	});
 </script>
 
-<main class="flex-1 p-12">
+<main class="flex h-full min-h-0 flex-1 flex-col p-12">
 	<h1 class="mb-8 text-4xl font-bold">ALL Services</h1>
 
-	<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-		{#each services as service}
-			<div class="rounded-lg bg-white p-6 shadow transition-shadow hover:shadow-lg">
-				<div class="relative mb-4 flex items-start justify-between">
-					<a href={`/services/details?id=${service.id}`}>
-						<h3 class="text-lg font-bold">{service.name}</h3>
-					</a>
+	<div class="app-scroll min-h-0 flex-1 overflow-y-auto pr-1">
+		<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+			{#each services as service}
+				<div class="rounded-lg bg-white p-6 shadow transition-shadow hover:shadow-lg">
+					<div class="relative mb-4 flex items-start justify-between">
+						<a href={`/services/details?id=${service.id}`}>
+							<h3 class="text-lg font-bold">{service.name}</h3>
+						</a>
 
-					<div class="relative">
-						<button
-							bind:this={menuButtonRefs[service.id]}
-							on:click|stopPropagation={() => toggleMenu(service.id)}
-							class="px-2 py-1 text-gray-500 hover:text-gray-700"
-						>
-							⋮
-						</button>
-						{#if openMenuId === service.id}
-							<div
-								bind:this={menuRefs[service.id]}
-								class="absolute right-0 z-50 mt-2 w-40 rounded border bg-white shadow"
+						<div class="relative">
+							<button
+								bind:this={menuButtonRefs[service.id]}
+								on:click|stopPropagation={() => toggleMenu(service.id)}
+								class="px-2 py-1 text-gray-500 hover:text-gray-700"
 							>
-								<button
-									on:click={() => openEdit(service.id)}
-									class="block w-full px-4 py-2 text-left hover:bg-gray-100"
+								⋮
+							</button>
+							{#if openMenuId === service.id}
+								<div
+									bind:this={menuRefs[service.id]}
+									class="absolute right-0 z-50 mt-2 w-40 rounded border bg-white shadow"
 								>
-									Edit
-								</button>
-								<button
-									on:click={() => confirmDelete(service.id)}
-									class="block w-full px-4 py-2 text-left text-red-600 hover:bg-gray-100"
-								>
-									Delete
-								</button>
-							</div>
-						{/if}
+									<button
+										on:click={() => openEdit(service.id)}
+										class="block w-full px-4 py-2 text-left hover:bg-gray-100"
+									>
+										Edit
+									</button>
+									<button
+										on:click={() => confirmDelete(service.id)}
+										class="block w-full px-4 py-2 text-left text-red-600 hover:bg-gray-100"
+									>
+										Delete
+									</button>
+								</div>
+							{/if}
+						</div>
 					</div>
-				</div>
 
-				<p class={`mb-2 text-sm ${getStatusColor(service.status)}`}>● {service.status}</p>
-				<a href={service.url}>
-					<p class="mb-4 text-sm text-gray-600">{service.url}</p>
-				</a>
-				<button
-					type="button"
-					class="text-left text-xs text-gray-500 hover:text-gray-700"
-					on:click={() => {
-						showLastCheckRelative = !showLastCheckRelative;
-						recomputeLastChecks();
-					}}
-					title="Toggle last check format"
-				>
-					Last Check: {service.lastCheck}
-				</button>
-				<button
-					class="mt-4 w-full rounded-xl bg-gray-300 px-6 py-2 hover:bg-gray-400 disabled:opacity-50"
-					on:click={() => runCheck(service.id)}
-					disabled={checkingIds.has(service.id)}
-				>
-					{checkingIds.has(service.id) ? 'Checking...' : 'Check'}
-				</button>
-			</div>
-		{/each}
+					<p class={`mb-2 text-sm ${getStatusColor(service.status)}`}>● {service.status}</p>
+					<a href={service.url}>
+						<p class="mb-4 text-sm text-gray-600">{service.url}</p>
+					</a>
+					<button
+						type="button"
+						class="text-left text-xs text-gray-500 hover:text-gray-700"
+						on:click={() => {
+							showLastCheckRelative = !showLastCheckRelative;
+							recomputeLastChecks();
+						}}
+						title="Toggle last check format"
+					>
+						Last Check: {service.lastCheck}
+					</button>
+					<button
+						class="mt-4 w-full rounded-xl bg-gray-300 px-6 py-2 hover:bg-gray-400 disabled:opacity-50"
+						on:click={() => runCheck(service.id)}
+						disabled={checkingIds.has(service.id)}
+					>
+						{checkingIds.has(service.id) ? 'Checking...' : 'Check'}
+					</button>
+				</div>
+			{/each}
+		</div>
 	</div>
 
 	{#if confirmDeleteId !== null}
