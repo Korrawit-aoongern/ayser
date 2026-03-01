@@ -19,7 +19,7 @@ Current focus is **unit tests**: test API module logic with mocked dependencies 
   - Duplicate email + wrong old password error paths.
 - `backend/tests/unit/test_health_api.py`
   - Health routes with mocked HTTP client and DB.
-  - Not-found paths, check timeout path, history ownership path.
+  - Not-found paths and check timeout path.
 
 ## What "Unit Test" Means Here
 - No real Postgres connection.
@@ -83,4 +83,3 @@ In `.gitlab-ci.yml`, unit tests run when `backend/tests/unit` exists:
 ```sh
 if [ -d backend/tests/unit ]; then pytest -q backend/tests/unit; else python3 -m compileall backend/app; fi
 ```
-

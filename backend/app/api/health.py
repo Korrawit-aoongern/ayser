@@ -287,31 +287,3 @@ async def check_service(service_id: int, user_id=Depends(require_user)):
         await db.close()
 
 
-@router.get("/services/{service_id}/history")
-async def get_service_health_history(service_id: int, limit: int = 100, user_id=Depends(require_user)):
-    """Get health check history for a service"""
-    db = await get_db()
-    try:
-        # Verify user owns the service
-        service = await db.fetchrow(
-            "SELECT service_id FROM services WHERE service_id=$1 AND user_id=$2",
-            service_id, user_id
-        )
-        
-        if not service:
-            raise HTTPException(status_code=404, detail="Service not found")
-
-        history = await db.fetch(
-            """
-            SELECT health_id, service_id, availability, responsiveness, reliability, overall_score, checked_at
-            FROM service_health
-            WHERE service_id=$1
-            ORDER BY checked_at DESC
-            LIMIT $2
-            """,
-            service_id, limit
-        )
-
-        return [dict(h) for h in history]
-    finally:
-        await db.close()

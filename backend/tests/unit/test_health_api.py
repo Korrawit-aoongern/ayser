@@ -177,17 +177,3 @@ async def test_check_service_timeout_records_down_and_event(monkeypatch):
     assert len(execute_calls) >= 2
 
 
-@pytest.mark.anyio
-async def test_get_service_health_history_requires_ownership(monkeypatch):
-    db = DummyDB(fetchrow_results=[None])
-
-    async def fake_get_db():
-        return db
-
-    monkeypatch.setattr(health, "get_db", fake_get_db)
-
-    with pytest.raises(HTTPException) as exc:
-        await health.get_service_health_history(service_id=1, user_id="u1")
-
-    assert exc.value.status_code == 404
-    assert exc.value.detail == "Service not found"
