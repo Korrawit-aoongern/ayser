@@ -29,11 +29,13 @@
 		p50: number | null;
 		p90: number | null;
 		p99: number | null;
+		error_rate: number | null;
 		cpu_unit: string | null;
 		memory_unit: string | null;
 		p50_unit: string | null;
 		p90_unit: string | null;
 		p99_unit: string | null;
+		error_rate_unit: string | null;
 	} = {
 		health_id: null,
 		service_id: 0,
@@ -49,11 +51,13 @@
 		p50: null,
 		p90: null,
 		p99: null,
+		error_rate: null,
 		cpu_unit: null,
 		memory_unit: null,
 		p50_unit: null,
 		p90_unit: null,
-		p99_unit: null
+		p99_unit: null,
+		error_rate_unit: null
 	};
 
 	let events: Array<{
@@ -125,11 +129,13 @@
 				p50: selectedMetrics.p50 ?? null,
 				p90: selectedMetrics.p90 ?? null,
 				p99: selectedMetrics.p99 ?? null,
+				error_rate: selectedMetrics.error_rate ?? null,
 				cpu_unit: selectedMetrics.cpu_unit ?? null,
 				memory_unit: selectedMetrics.memory_unit ?? null,
 				p50_unit: selectedMetrics.p50_unit ?? null,
 				p90_unit: selectedMetrics.p90_unit ?? null,
-				p99_unit: selectedMetrics.p99_unit ?? null
+				p99_unit: selectedMetrics.p99_unit ?? null,
+				error_rate_unit: selectedMetrics.error_rate_unit ?? null
 			};
 
 			events = (data?.events ?? []).map((event: any) => ({
@@ -231,11 +237,13 @@
 				p50: healthData.p50,
 				p90: healthData.p90,
 				p99: healthData.p99,
+				error_rate: healthData.error_rate,
 				cpu_unit: healthData.cpu_unit,
 				memory_unit: healthData.memory_unit,
 				p50_unit: healthData.p50_unit,
 				p90_unit: healthData.p90_unit,
-				p99_unit: healthData.p99_unit
+				p99_unit: healthData.p99_unit,
+				error_rate_unit: healthData.error_rate_unit
 			};
 
 			// Reload service data to get new events
@@ -306,6 +314,7 @@
 		if (unit === 'seconds') return formatDurationSeconds(value);
 		if (unit === 'ms') return `${value.toFixed(2)} ms`;
 		if (unit === 'count') return `${Math.round(value).toLocaleString()}`;
+		if (unit === 'ratio') return `${(value * 100).toFixed(2)}%`;
 		if (unit === '%') return `${value.toFixed(2)}%`;
 		return `${value.toFixed(2)}${unit ? ` ${unit}` : ''}`;
 	}
@@ -325,6 +334,7 @@
 		p50: '50th percentile latency from scraped metrics (typical latency).',
 		p90: '90th percentile latency from scraped metrics (high latency bound).',
 		p99: '99th percentile latency from scraped metrics (tail latency).',
+		errorRate: 'Error ratio/rate from metrics exporter; shown as percentage when available.',
 		created: 'Timestamp when this service was created in Ayser.'
 	};
 
@@ -577,6 +587,13 @@
 								class="cursor-help underline decoration-transparent">Latency p99:</strong
 							>
 							{formatMetric(healthData.p99, healthData.p99_unit)}
+						</p>
+						<p>
+							<strong
+								title={detailTooltips.errorRate}
+								class="cursor-help underline decoration-transparent">Error Rate:</strong
+							>
+							{formatMetric(healthData.error_rate, healthData.error_rate_unit)}
 						</p>
 						<p>
 							<strong

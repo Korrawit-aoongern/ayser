@@ -20,6 +20,9 @@ Current focus is **unit tests**: test API module logic with mocked dependencies 
 - `backend/tests/unit/test_health_api.py`
   - Health routes with mocked HTTP client and DB.
   - Not-found paths and check timeout path.
+- `backend/tests/unit/test_ml_api.py`
+  - Manual ML evaluate route behavior.
+  - Success path and service ownership not-found path.
 
 ## What "Unit Test" Means Here
 - No real Postgres connection.
@@ -50,6 +53,7 @@ pytest -q backend/tests/unit/test_services_api.py
 - Services API core branches: `DONE`
 - User API core branches: `DONE`
 - Health API key branches: `DONE`
+- ML API key branches: `DONE`
 - Event API: `TODO` (currently route stub)
 - Metrics API: `TODO` (currently route stub)
 - Integration tests (real app + DB): `TODO`
