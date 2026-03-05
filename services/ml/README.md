@@ -24,3 +24,16 @@ Default is `50`.
 
 - `GET /` health check
 - `POST /evaluate` evaluate anomaly on numeric samples
+- `GET /metrics` dev Prometheus-style metrics endpoint for testing Ayser scraping
+
+## Dev Metrics Profiles
+
+The `/metrics` endpoint can output unhealthy or normal metrics:
+
+```bash
+set DEMO_METRICS_PROFILE=bad
+# or
+set DEMO_METRICS_PROFILE=normal
+```
+
+Default is `bad`.

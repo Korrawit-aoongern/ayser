@@ -3,6 +3,7 @@ from typing import List
 
 import numpy as np
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 from sklearn.ensemble import IsolationForest
 
@@ -23,9 +24,61 @@ async def root():
     return {"status": "ok", "service": "Ayser ML Service"}
 
 
+@app.get("/metrics", response_class=PlainTextResponse)
+async def demo_metrics():
+    """
+    Dev-only metrics endpoint with intentionally unhealthy values.
+    Useful for testing Ayser metrics scraping and anomaly pipeline.
+    """
+    profile = os.getenv("DEMO_METRICS_PROFILE", "bad").strip().lower()
+    if profile == "normal":
+        payload = """
+# HELP cpu CPU utilization percent
+# TYPE cpu gauge
+cpu 99
+# HELP memory Memory usage bytes
+# TYPE memory gauge
+memory 4100000
+# HELP latency_p50 p50 latency in seconds
+# TYPE latency_p50 gauge
+latency_p50 0.7
+# HELP latency_p90 p90 latency in seconds
+# TYPE latency_p90 gauge
+latency_p90 0.5
+# HELP latency_p99 p99 latency in seconds
+# TYPE latency_p99 gauge
+latency_p99 0.7
+# HELP error_rate Error rate ratio
+# TYPE error_rate gauge
+error_rate 0.7
+"""
+    else:
+        payload = """
+# HELP cpu CPU utilization percent
+# TYPE cpu gauge
+cpu 97
+# HELP memory Memory usage bytes
+# TYPE memory gauge
+memory 421347328
+# HELP latency_p50 p50 latency in seconds
+# TYPE latency_p50 gauge
+latency_p50 0.33
+# HELP latency_p90 p90 latency in seconds
+# TYPE latency_p90 gauge
+latency_p90 2.70
+# HELP latency_p99 p99 latency in seconds
+# TYPE latency_p99 gauge
+latency_p99 4.90
+# HELP error_rate Error rate ratio
+# TYPE error_rate gauge
+error_rate 0.18
+"""
+    return payload.strip() + "\n"
+
+
 @app.post("/evaluate")
 async def evaluate(request: EvaluateRequest):
-    min_samples = int(os.getenv("ML_MIN_SAMPLES", "5"))
+    min_samples = int(os.getenv("ML_MIN_SAMPLES", "1"))
 
     if len(request.feature_names) < 2:
         raise HTTPException(status_code=400, detail="at least two features are required")

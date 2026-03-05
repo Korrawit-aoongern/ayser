@@ -15,7 +15,7 @@ METRIC_FEATURES = [
     "memory",
 ]
 
-MIN_POINTS = 5
+MIN_POINTS = 1
 WINDOW_SIZE = 100
 GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
 LLM_SYSTEM_INSTRUCTION = """System Instruction (LLM Role):

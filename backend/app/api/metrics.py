@@ -74,6 +74,7 @@ def extract_prometheus_metrics(raw_metrics: str):
 
     cpu_sample = pick_first(
         [
+            "cpu",
             "process_cpu_seconds_total",
             "container_cpu_usage_seconds_total",
             "node_cpu_seconds_total",
@@ -86,6 +87,7 @@ def extract_prometheus_metrics(raw_metrics: str):
 
     memory_sample = pick_first(
         [
+            "memory",
             "process_resident_memory_bytes",
             "process_virtual_memory_bytes",
             "node_memory_MemAvailable_bytes",
@@ -140,6 +142,22 @@ def extract_prometheus_metrics(raw_metrics: str):
             selected["latency_p90"] = (value, unit)
         elif quantile == "0.99" and "latency_p99" not in selected:
             selected["latency_p99"] = (value, unit)
+
+    # Support direct latency gauges commonly emitted in demo/test exporters.
+    direct_p50 = pick_first(["latency_p50", "response_latency_p50", "http_latency_p50"])
+    if direct_p50 and "latency_p50" not in selected:
+        value = direct_p50["value"]
+        selected["latency_p50"] = (value * 1000, "ms") if value < 100 else (value, "ms")
+
+    direct_p90 = pick_first(["latency_p90", "response_latency_p90", "http_latency_p90"])
+    if direct_p90 and "latency_p90" not in selected:
+        value = direct_p90["value"]
+        selected["latency_p90"] = (value * 1000, "ms") if value < 100 else (value, "ms")
+
+    direct_p99 = pick_first(["latency_p99", "response_latency_p99", "http_latency_p99"])
+    if direct_p99 and "latency_p99" not in selected:
+        value = direct_p99["value"]
+        selected["latency_p99"] = (value * 1000, "ms") if value < 100 else (value, "ms")
 
     request_sample = pick_first(
         [
