@@ -283,6 +283,12 @@
 		return availability === 'Up' ? 'text-green-600' : 'text-red-600';
 	}
 
+	function getEventLevelColor(level: string): string {
+		if (level === 'ERROR') return 'text-red-700';
+		if (level === 'WARNING') return 'text-amber-700';
+		return 'text-blue-700';
+	}
+
 	function formatBytes(value: number | null): string {
 		if (typeof value !== 'number') return '-';
 		const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -459,13 +465,16 @@
 					>
 						{#if events.length === 0}
 							<p class="text-sm text-gray-600">No events recorded yet.</p>
+							<p class="text-sm text-gray-600">Keep checking until metrics are high enough for analysis.</p>
 						{:else}
 							{#each events as event}
 								<div>
-									<p class="text-sm font-semibold">
+									<p class={`text-sm font-semibold ${getEventLevelColor(event.event_level)}`}>
 										[{event.event_level}] {formatTime(event.detected_at)}
 									</p>
-									<p class="text-sm break-words text-gray-700">{event.event_message}</p>
+									<p class="text-sm break-words whitespace-pre-line text-gray-700">
+										{event.event_message}
+									</p>
 								</div>
 							{/each}
 						{/if}
@@ -535,7 +544,14 @@
 								title={detailTooltips.serviceUrl}
 								class="cursor-help underline decoration-transparent">Service URL:</strong
 							>
-							<span class="break-all text-blue-600">{service.service_url}</span>
+							<a
+								href={service.service_url}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="break-all text-blue-600 underline decoration-transparent hover:text-blue-700"
+							>
+								{service.service_url}
+							</a>
 						</p>
 						<p>
 							<strong
