@@ -7,6 +7,7 @@ variables:
 
 workflow:
   rules:
+    - if: '$DEPLOY_ONLY == "true"'
     - if: '$CI_COMMIT_BRANCH == "dev"'
     - if: '$CI_COMMIT_BRANCH == "pre-prod"'
     - if: '$CI_COMMIT_BRANCH == "main"'
@@ -43,6 +44,8 @@ lint_and_unit_test:
     - npm run lint
     - npm run check
   rules:
+    - if: '$DEPLOY_ONLY == "true"'
+      when: never
     - if: '$CI_COMMIT_BRANCH == "dev"'
 
 # ==========================================
@@ -71,6 +74,8 @@ build_artifacts:
       - artifacts/image-tags.env
     expire_in: 1 week
   rules:
+    - if: '$DEPLOY_ONLY == "true"'
+      when: never
     - if: '$CI_COMMIT_BRANCH == "dev"'
 
 # ==========================================
@@ -86,17 +91,21 @@ sonarcloud-check:
     paths:
       - .sonar/cache
   script:
-    - echo "Running Sonar scanner (stub-ready)..."
+    - echo "Running Sonar scanner..."
     - sonar-scanner
-  only:
-    - merge_requests
-    - master
-    - main
-    - pre-prod
+  rules:
+    - if: '$DEPLOY_ONLY == "true"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "pre-prod"'
 
 secret_detection:
   stage: security
   rules:
+    - if: '$DEPLOY_ONLY == "true"'
+      when: never
     - if: '$CI_COMMIT_BRANCH == "pre-prod"'
 
 # ==========================================
@@ -111,26 +120,69 @@ integration_test:
     - job: build_artifacts
       artifacts: true
   script:
-    - source artifacts/image-tags.env
+    - apk add --no-cache curl
+    - set -a
+    - . artifacts/image-tags.env
+    - set +a
     - echo "Logging into GitLab Container Registry..."
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
     - echo "Pulling built images..."
     - docker pull "$FRONTEND_IMAGE"
     - docker pull "$BACKEND_IMAGE"
-    - echo "Running integration test stub against built images..."
-    - echo "spin up containers and run integration suite"
+    - echo "Building ML service image..."
+    - export ML_IMAGE="${CI_REGISTRY_IMAGE}/infra-ml:${CI_COMMIT_SHA}"
+    - docker build -f infra/Dockerfile.ml -t "$ML_IMAGE" .
+    - echo "ML_IMAGE=$ML_IMAGE" > artifacts/compose.env
+    - echo "Starting integration test stack..."
+    - docker compose -p ci --env-file artifacts/compose.env -f infra/docker-compose.ci.yml up -d
+    - echo "Waiting for backend and ML to be ready..."
+    - |
+      ready=0
+      for i in $(seq 1 30); do
+        if docker run --rm --network ci_default curlimages/curl:8.10.1 -fsS http://backend:8000/ >/dev/null 2>&1 \
+          && docker run --rm --network ci_default curlimages/curl:8.10.1 -fsS http://ml:8010/ >/dev/null 2>&1; then
+          ready=1
+          break
+        fi
+        sleep 2
+      done
+      if [ "$ready" -ne 1 ]; then
+        echo "Services not ready in time"
+        docker compose -p ci --env-file artifacts/compose.env -f infra/docker-compose.ci.yml logs --no-color || true
+        exit 1
+      fi
+    - echo "Running integration tests..."
+    - |
+      docker run --rm \
+        --network ci_default \
+        -v "$CI_PROJECT_DIR":/workspace \
+        -w /workspace \
+        python:3.11-alpine sh -c \
+        "apk add --no-cache py3-pip && \
+         pip install --break-system-packages -r backend/requirements.txt && \
+         BACKEND_BASE_URL=http://backend:8000 ML_BASE_URL=http://ml:8010 pytest -q backend/tests/integration"
+  after_script:
+    - echo "Tearing down integration stack..."
+    - docker compose -p ci --env-file artifacts/compose.env -f infra/docker-compose.ci.yml down -v
   rules:
+    - if: '$DEPLOY_ONLY == "true"'
+      when: never
     - if: '$CI_COMMIT_BRANCH == "dev"'
 
 e2e_test:
   stage: test
-  image: docker:27.1.1
-  services:
-    - name: docker:27.1.1-dind
+  image: mcr.microsoft.com/playwright:v1.50.0-jammy
+  variables:
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
   script:
-    - echo "Running E2E test stub on pre-prod..."
-    - echo "pull deployed pre-prod image/tag and run Playwright/Cypress"
+    - echo "Running Playwright E2E tests..."
+    - cd frontend
+    - npm ci
+    - npm run build
+    - npx playwright test
   rules:
+    - if: '$DEPLOY_ONLY == "true"'
+      when: never
     - if: '$CI_COMMIT_BRANCH == "pre-prod"'
 
 # ==========================================
@@ -149,6 +201,8 @@ promote_to_preprod:
         --data "{\"source_branch\":\"dev\",\"target_branch\":\"pre-prod\",\"title\":\"Draft: Promote dev to pre-prod (${CI_COMMIT_SHORT_SHA})\",\"remove_source_branch\":false,\"squash\":false}" \
         "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests"
   rules:
+    - if: '$DEPLOY_ONLY == "true"'
+      when: never
     - if: '$CI_COMMIT_BRANCH == "dev"'
 
 promote_to_main:
@@ -164,18 +218,75 @@ promote_to_main:
         --data "{\"source_branch\":\"pre-prod\",\"target_branch\":\"main\",\"title\":\"Draft: Promote pre-prod to main (${CI_COMMIT_SHORT_SHA})\",\"remove_source_branch\":false,\"squash\":false}" \
         "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests"
   rules:
+    - if: '$DEPLOY_ONLY == "true"'
+      when: never
     - if: '$CI_COMMIT_BRANCH == "pre-prod"'
 
 # ==========================================
 # STAGE: DEPLOY (main only)
 # ==========================================
-deploy_production:
+
+deploy_preflight:
   stage: deploy
   image: alpine:3.20
   script:
-    - echo "Deploying frontend to Vercel (stub)..."
-    - echo "vercel deploy --prod"
-    - echo "Deploying backend to serverless (stub)..."
-    - echo "run backend serverless deploy command"
+    - |
+      missing=0
+      for var in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID RENDER_BACKEND_DEPLOY_HOOK RENDER_ML_DEPLOY_HOOK; do
+        if [ -z "$(eval echo \$$var)" ]; then
+          echo "Missing $var"
+          missing=1
+        fi
+      done
+      if [ "$missing" -ne 0 ]; then
+        exit 1
+      fi
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+deploy_frontend_vercel:
+  stage: deploy
+  image: node:20.19.0-alpine3.20
+  needs:
+    - deploy_preflight
+  script:
+    - cd frontend
+    - npm ci
+    - npm run build
+    - npx vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
+    - npx vercel build --prod --token "$VERCEL_TOKEN"
+    - npx vercel deploy --prebuilt --prod --token "$VERCEL_TOKEN"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+deploy_backend_render:
+  stage: deploy
+  image: curlimages/curl:8.10.1
+  needs:
+    - deploy_preflight
+  script:
+    - echo "Triggering Render deploy for backend..."
+    - |
+      if [ -z "$RENDER_BACKEND_DEPLOY_HOOK" ]; then
+        echo "Missing RENDER_BACKEND_DEPLOY_HOOK"
+        exit 1
+      fi
+    - curl --fail -X POST "$RENDER_BACKEND_DEPLOY_HOOK"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+deploy_ml_render:
+  stage: deploy
+  image: curlimages/curl:8.10.1
+  needs:
+    - deploy_preflight
+  script:
+    - echo "Triggering Render deploy for ML service..."
+    - |
+      if [ -z "$RENDER_ML_DEPLOY_HOOK" ]; then
+        echo "Missing RENDER_ML_DEPLOY_HOOK"
+        exit 1
+      fi
+    - curl --fail -X POST "$RENDER_ML_DEPLOY_HOOK"
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
