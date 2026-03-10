@@ -1,29 +1,293 @@
-# You can override the included template(s) by including variable overrides
-# SAST customization: https://docs.gitlab.com/ee/user/application_security/sast/#customizing-the-sast-settings
-# Secret Detection customization: https://docs.gitlab.com/user/application_security/secret_detection/pipeline/configure
-# Dependency Scanning customization: https://docs.gitlab.com/ee/user/application_security/dependency_scanning/#customizing-the-dependency-scanning-settings
-# Container Scanning customization: https://docs.gitlab.com/ee/user/application_security/container_scanning/#customizing-the-container-scanning-settings
-# Note that environment variables can be set in several places
-# See https://docs.gitlab.com/ee/ci/variables/#cicd-variable-precedence
+variables:
+  SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"
+  GIT_DEPTH: "0"
+  DOCKER_TLS_CERTDIR: "/certs"
+  FRONTEND_IMAGE: "${CI_REGISTRY_IMAGE}/infra-frontend:${CI_COMMIT_SHA}"
+  BACKEND_IMAGE: "${CI_REGISTRY_IMAGE}/infra-backend:${CI_COMMIT_SHA}"
+
+workflow:
+  rules:
+    - if: '$DEPLOY_ONLY == "true"'
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+    - if: '$CI_COMMIT_BRANCH == "pre-prod"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - when: never
+
 stages:
-- build
-- test
-- security
-- deploy
-build_placeholder:
-  stage: build
-  image: node:20
-  script:
-    - echo "Build stage placeholder"
-  when: manual # Disable pipline run for now
-cicd_alive_check:
-  stage: test
-  image: node:20
-  script:
-  - echo "CI is alive"
-  - node --version
-  when: manual # Disable pipline run for now
+  - pre-build
+  - build
+  - security
+  - test
+  - merge
+  - deploy
 
 include:
-- template: Security/Secret-Detection.gitlab-ci.yml
+  - template: Security/Secret-Detection.gitlab-ci.yml
 
+# ==========================================
+# STAGE: PRE-BUILD (dev only)
+# ==========================================
+lint_and_unit_test:
+  stage: pre-build
+  image: node:20.19.0-alpine3.20
+  script:
+    - apk add --no-cache python3 py3-pip
+    - pip install --break-system-packages -r backend/requirements.txt ruff
+    - echo "Running backend lint (ruff)..."
+    - ruff check backend/app
+    - echo "Running backend unit tests (or smoke fallback)..."
+    - if [ -d backend/tests/unit ]; then pytest -q backend/tests/unit; else python3 -m compileall backend/app; fi
+    - echo "Running frontend lint and type checks..."
+    - cd frontend
+    - npm ci
+    - npm run format
+    - npm run lint
+    - npm run check
+  rules:
+    - if: '$DEPLOY_ONLY == "true"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+
+# ==========================================
+# STAGE: BUILD (dev only, Docker images)
+# ==========================================
+build_artifacts:
+  stage: build
+  image: docker:27.1.1
+  services:
+    - name: docker:27.1.1-dind
+  script:
+    - echo "Logging into GitLab Container Registry..."
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - echo "Building frontend image..."
+    - docker build -f infra/Dockerfile.frontend -t "$FRONTEND_IMAGE" .
+    - echo "Building backend image..."
+    - docker build -f infra/Dockerfile.backend -t "$BACKEND_IMAGE" .
+    - echo "Pushing images..."
+    - docker push "$FRONTEND_IMAGE"
+    - docker push "$BACKEND_IMAGE"
+    - mkdir -p artifacts
+    - echo "FRONTEND_IMAGE=$FRONTEND_IMAGE" > artifacts/image-tags.env
+    - echo "BACKEND_IMAGE=$BACKEND_IMAGE" >> artifacts/image-tags.env
+  artifacts:
+    paths:
+      - artifacts/image-tags.env
+    expire_in: 1 week
+  rules:
+    - if: '$DEPLOY_ONLY == "true"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+
+# ==========================================
+# STAGE: SECURITY (pre-prod only)
+# ==========================================
+sonarcloud-check:
+  stage: security
+  image:
+    name: sonarsource/sonar-scanner-cli:latest
+    entrypoint: [""]
+  cache:
+    key: "${CI_JOB_NAME}"
+    paths:
+      - .sonar/cache
+  script:
+    - echo "Running Sonar scanner..."
+    - sonar-scanner
+  rules:
+    - if: '$DEPLOY_ONLY == "true"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "pre-prod"'
+
+secret_detection:
+  stage: security
+  rules:
+    - if: '$DEPLOY_ONLY == "true"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == "pre-prod"'
+
+# ==========================================
+# STAGE: TEST
+# ==========================================
+integration_test:
+  stage: test
+  image: docker:27.1.1
+  services:
+    - name: docker:27.1.1-dind
+  needs:
+    - job: build_artifacts
+      artifacts: true
+  script:
+    - apk add --no-cache curl
+    - set -a
+    - . artifacts/image-tags.env
+    - set +a
+    - echo "Logging into GitLab Container Registry..."
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - echo "Pulling built images..."
+    - docker pull "$FRONTEND_IMAGE"
+    - docker pull "$BACKEND_IMAGE"
+    - echo "Building ML service image..."
+    - export ML_IMAGE="${CI_REGISTRY_IMAGE}/infra-ml:${CI_COMMIT_SHA}"
+    - docker build -f infra/Dockerfile.ml -t "$ML_IMAGE" .
+    - echo "ML_IMAGE=$ML_IMAGE" > artifacts/compose.env
+    - echo "Starting integration test stack..."
+    - docker compose -p ci --env-file artifacts/compose.env -f infra/docker-compose.ci.yml up -d
+    - echo "Waiting for backend and ML to be ready..."
+    - |
+      ready=0
+      for i in $(seq 1 30); do
+        if docker run --rm --network ci_default curlimages/curl:8.10.1 -fsS http://backend:8000/ >/dev/null 2>&1 \
+          && docker run --rm --network ci_default curlimages/curl:8.10.1 -fsS http://ml:8010/ >/dev/null 2>&1; then
+          ready=1
+          break
+        fi
+        sleep 2
+      done
+      if [ "$ready" -ne 1 ]; then
+        echo "Services not ready in time"
+        docker compose -p ci --env-file artifacts/compose.env -f infra/docker-compose.ci.yml logs --no-color || true
+        exit 1
+      fi
+    - echo "Running integration tests..."
+    - |
+      docker run --rm \
+        --network ci_default \
+        -v "$CI_PROJECT_DIR":/workspace \
+        -w /workspace \
+        python:3.11-alpine sh -c \
+        "apk add --no-cache py3-pip && \
+         pip install --break-system-packages -r backend/requirements.txt && \
+         BACKEND_BASE_URL=http://backend:8000 ML_BASE_URL=http://ml:8010 pytest -q backend/tests/integration"
+  after_script:
+    - echo "Tearing down integration stack..."
+    - docker compose -p ci --env-file artifacts/compose.env -f infra/docker-compose.ci.yml down -v
+  rules:
+    - if: '$DEPLOY_ONLY == "true"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+
+e2e_test:
+  stage: test
+  image: mcr.microsoft.com/playwright:v1.50.0-jammy
+  variables:
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+  script:
+    - echo "Running Playwright E2E tests..."
+    - cd frontend
+    - npm ci
+    - npm run build
+    - npx playwright install
+    - npx playwright test
+  rules:
+    - if: '$DEPLOY_ONLY == "true"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == "pre-prod"'
+
+# ==========================================
+# STAGE: MERGE (Draft MR via API)
+# ==========================================
+promote_to_preprod:
+  stage: merge
+  image: curlimages/curl:8.10.1
+  allow_failure: false
+  script:
+    - echo "Creating Draft MR from dev -> pre-prod..."
+    - |
+      curl --fail --request POST \
+        --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
+        --header "Content-Type: application/json" \
+        --data "{\"source_branch\":\"dev\",\"target_branch\":\"pre-prod\",\"title\":\"Draft: Promote dev to pre-prod (${CI_COMMIT_SHORT_SHA})\",\"remove_source_branch\":false,\"squash\":false}" \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests"
+  rules:
+    - if: '$DEPLOY_ONLY == "true"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+
+promote_to_main:
+  stage: merge
+  image: curlimages/curl:8.10.1
+  allow_failure: false
+  script:
+    - echo "Creating Draft MR from pre-prod -> main..."
+    - |
+      curl --fail --request POST \
+        --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
+        --header "Content-Type: application/json" \
+        --data "{\"source_branch\":\"pre-prod\",\"target_branch\":\"main\",\"title\":\"Draft: Promote pre-prod to main (${CI_COMMIT_SHORT_SHA})\",\"remove_source_branch\":false,\"squash\":false}" \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests"
+  rules:
+    - if: '$DEPLOY_ONLY == "true"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == "pre-prod"'
+
+# ==========================================
+# STAGE: DEPLOY (main only)
+# ==========================================
+
+deploy_preflight:
+  stage: deploy
+  image: alpine:3.20
+  script:
+    - |
+      missing=0
+      for var in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID RENDER_BACKEND_DEPLOY_HOOK RENDER_ML_DEPLOY_HOOK; do
+        if [ -z "$(eval echo \$$var)" ]; then
+          echo "Missing $var"
+          missing=1
+        fi
+      done
+      if [ "$missing" -ne 0 ]; then
+        exit 1
+      fi
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+deploy_frontend_vercel:
+  stage: deploy
+  image: node:20.19.0-alpine3.20
+  needs:
+    - deploy_preflight
+  script:
+    - cd frontend
+    - npm ci
+    - npm run build
+    - npx vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
+    - npx vercel build --prod --token "$VERCEL_TOKEN"
+    - npx vercel deploy --prebuilt --prod --token "$VERCEL_TOKEN"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+deploy_backend_render:
+  stage: deploy
+  image: curlimages/curl:8.10.1
+  needs:
+    - deploy_preflight
+  script:
+    - echo "Triggering Render deploy for backend..."
+    - |
+      if [ -z "$RENDER_BACKEND_DEPLOY_HOOK" ]; then
+        echo "Missing RENDER_BACKEND_DEPLOY_HOOK"
+        exit 1
+      fi
+    - curl --fail -X POST "$RENDER_BACKEND_DEPLOY_HOOK"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+deploy_ml_render:
+  stage: deploy
+  image: curlimages/curl:8.10.1
+  needs:
+    - deploy_preflight
+  script:
+    - echo "Triggering Render deploy for ML service..."
+    - |
+      if [ -z "$RENDER_ML_DEPLOY_HOOK" ]; then
+        echo "Missing RENDER_ML_DEPLOY_HOOK"
+        exit 1
+      fi
+    - curl --fail -X POST "$RENDER_ML_DEPLOY_HOOK"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'

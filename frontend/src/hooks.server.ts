@@ -10,7 +10,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	// Check for JWT token in cookies
-	const token = event.cookies.get('jwt');
+	const token = event.cookies.get('access_token');
 
 	// If no token and not on auth page, redirect to login
 	if (!token && !pathname.startsWith('/services/auth')) {

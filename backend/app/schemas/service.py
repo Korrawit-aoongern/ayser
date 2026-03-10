@@ -1,25 +1,37 @@
+import uuid
 from pydantic import BaseModel
 from typing import Optional
+from datetime import datetime
 
 class ServiceCreate(BaseModel):
     service_name: str
-    url: str
-    advanced_method: str = "None"
-    metrics_endpoint: Optional[str] = None
+    service_url: str
+    check_type: str = "url"  # 'url' or 'url_metrics'
+    metrics_endpoint: Optional[str] = "/metrics"
 
 class ServiceUpdate(BaseModel):
     service_name: Optional[str] = None
-    url: Optional[str] = None
-    advanced_method: Optional[str] = None
+    service_url: Optional[str] = None
+    check_type: Optional[str] = None
     metrics_endpoint: Optional[str] = None
 
 class ServiceResponse(BaseModel):
-    id: int
+    service_id: int
+    user_id: uuid.UUID
     service_name: str
-    url: str
-    status: str
-    health: str
-    last_check: str
-    warnings: int
-    advanced_method: str
-    metrics_endpoint: Optional[str] = None
+    service_url: str
+    check_type: Optional[str] = "url"
+    metrics_endpoint: Optional[str] = "/metrics"
+    availability: Optional[str] = None
+    checked_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+
+class ServiceWithHealth(BaseModel):
+    service_id: int
+    service_name: str
+    service_url: str
+    check_type: str
+    metrics_endpoint: Optional[str] = "/metrics"
+    created_at: Optional[datetime] = None
+    latest_health: Optional[dict] = None
+
