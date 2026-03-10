@@ -15,6 +15,7 @@
 	let showLastCheckRelative = true;
 	let loading = true;
 	let error = '';
+	const apiBase = import.meta.env.VITE_API_BASE_URL;
 
 	let openMenuId: number | null = null;
 	let confirmDeleteId: number | null = null;
@@ -94,7 +95,7 @@
 		if (checkingIds.has(serviceId)) return;
 		checkingIds = new Set(checkingIds).add(serviceId);
 		try {
-			const res = await fetch(`/api/monitor/services/${serviceId}/check`, {
+			const res = await fetch(`${apiBase}/api/monitor/services/${serviceId}/check`, {
 				method: 'POST',
 				credentials: 'include'
 			});
@@ -149,7 +150,7 @@
 	onMount(() => {
 		(async () => {
 			try {
-				const res = await fetch('/api/services', {
+				const res = await fetch(`${apiBase}/api/services`, {
 					method: 'GET',
 					credentials: 'include',
 					headers: {

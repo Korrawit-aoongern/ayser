@@ -73,6 +73,7 @@
 	let error = '';
 	let lastLoadedServiceId: number | null = null;
 	let showLastCheckRelative = true;
+	const apiBase = import.meta.env.VITE_API_BASE_URL;
 
 	$: if (browser) {
 		const rawId = $page.url.searchParams.get('id');
@@ -94,7 +95,7 @@
 	async function loadService(id: number, showOverlay = false) {
 		if (showOverlay) isPageLoading = true;
 		try {
-			const res = await fetch(`/api/health/services/${id}`, {
+			const res = await fetch(`${apiBase}/api/health/services/${id}`, {
 				credentials: 'include'
 			});
 
@@ -180,7 +181,7 @@
 		showConfirm = false;
 
 		try {
-			await fetch(`/api/services/${serviceId}`, {
+			await fetch(`${apiBase}/api/services/${serviceId}`, {
 				method: 'DELETE',
 				credentials: 'include'
 			});
@@ -210,7 +211,7 @@
 		error = '';
 
 		try {
-			const res = await fetch(`/api/monitor/services/${serviceId}/check`, {
+			const res = await fetch(`${apiBase}/api/monitor/services/${serviceId}/check`, {
 				method: 'POST',
 				credentials: 'include'
 			});

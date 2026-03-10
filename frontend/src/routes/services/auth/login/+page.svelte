@@ -3,13 +3,14 @@
 	let password = '';
 	let error = '';
 	let loading = false;
+	const apiBase = import.meta.env.VITE_API_BASE_URL;
 
 	async function handleLogin(e: Event) {
 		e.preventDefault();
 		loading = true;
 		error = '';
 
-		const res = await fetch('/api/auth/login', {
+		const res = await fetch(`${apiBase}/api/auth/login`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			credentials: 'include',

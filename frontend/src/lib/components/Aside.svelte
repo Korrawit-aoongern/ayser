@@ -10,12 +10,13 @@
 	let error = '';
 	let username = 'Username';
 	let userLoading = false;
+	const apiBase = import.meta.env.VITE_API_BASE_URL;
 
 	async function logout(e: Event) {
 		e.preventDefault();
 
 		try {
-			const res = await fetch('/api/auth/logout', {
+			const res = await fetch(`${apiBase}/api/auth/logout`, {
 				method: 'POST',
 				credentials: 'include'
 			});
@@ -34,7 +35,7 @@
 
 	async function loadServices() {
 		try {
-			const res = await fetch('/api/services', {
+			const res = await fetch(`${apiBase}/api/services`, {
 				method: 'GET',
 				credentials: 'include',
 				headers: {
@@ -64,7 +65,7 @@
 	async function loadUser() {
 		userLoading = true;
 		try {
-			const res = await fetch('/api/user', {
+			const res = await fetch(`${apiBase}/api/user`, {
 				method: 'GET',
 				credentials: 'include'
 			});

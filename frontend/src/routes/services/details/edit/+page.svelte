@@ -6,6 +6,7 @@
 	let serviceId: number | null = null;
 	let loading = false;
 	let error = '';
+	const apiBase = import.meta.env.VITE_API_BASE_URL;
 
 	let formData = {
 		serviceName: '',
@@ -63,7 +64,7 @@
 	async function loadService(id: number) {
 		loading = true;
 		try {
-			const res = await fetch(`/api/services/${id}`, {
+			const res = await fetch(`${apiBase}/api/services/${id}`, {
 				credentials: 'include'
 			});
 
@@ -99,7 +100,7 @@
 					: '/metrics'
 				).trim() || '/metrics';
 
-			const res = await fetch(`/api/services/${serviceId}`, {
+			const res = await fetch(`${apiBase}/api/services/${serviceId}`, {
 				method: 'PUT',
 				credentials: 'include',
 				headers: { 'Content-Type': 'application/json' },
