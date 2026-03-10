@@ -179,6 +179,7 @@ e2e_test:
     - cd frontend
     - npm ci
     - npm run build
+    - npx playwright install
     - npx playwright test
   rules:
     - if: '$DEPLOY_ONLY == "true"'
