@@ -465,7 +465,9 @@
 					>
 						{#if events.length === 0}
 							<p class="text-sm text-gray-600">No events recorded yet.</p>
-							<p class="text-sm text-gray-600">Keep checking until metrics are high enough for analysis.</p>
+							<p class="text-sm text-gray-600">
+								Keep checking until metrics are high enough for analysis.
+							</p>
 						{:else}
 							{#each events as event}
 								<div>

@@ -39,8 +39,8 @@
 				<li><strong>Reliability</strong>: stability from recent checks.</li>
 				<li><strong>Overall Score</strong>: combined health score.</li>
 				<li>
-					<strong>Metrics</strong>: CPU, memory, p50/p90/p99 latency, and error rate (if available from
-					exporter).
+					<strong>Metrics</strong>: CPU, memory, p50/p90/p99 latency, and error rate (if available
+					from exporter).
 				</li>
 			</ul>
 		</div>
@@ -54,8 +54,8 @@
 				<li><strong>ERROR</strong>: clear abnormal behavior or service degradation.</li>
 			</ul>
 			<p class="mt-4 text-gray-700">
-				Some events are rule-based (threshold checks). Some are ML-driven and may include LLM-generated
-				explanations.
+				Some events are rule-based (threshold checks). Some are ML-driven and may include
+				LLM-generated explanations.
 			</p>
 		</div>
 
@@ -64,7 +64,9 @@
 			<ul class="list-inside list-disc space-y-2 text-gray-700">
 				<li>ML runs per service on numeric metrics only.</li>
 				<li>Low data points produce low-confidence outcomes (level may be downgraded).</li>
-				<li>Gemini is used to generate short operational explanation messages on anomaly events.</li>
+				<li>
+					Gemini is used to generate short operational explanation messages on anomaly events.
+				</li>
 				<li>If LLM is unavailable, Ayser falls back to a deterministic message template.</li>
 			</ul>
 		</div>
@@ -73,8 +75,8 @@
 			<h2 class="mb-4 text-2xl font-bold">6. Quick Troubleshooting</h2>
 			<ul class="list-inside list-disc space-y-2 text-gray-700">
 				<li>
-					<strong>Metrics show "-"</strong>: exporter may not expose recognized metric names yet. Run more
-					checks and verify endpoint output.
+					<strong>Metrics show "-"</strong>: exporter may not expose recognized metric names yet.
+					Run more checks and verify endpoint output.
 				</li>
 				<li><strong>No ML events yet</strong>: collect more metric points and rerun checks.</li>
 				<li><strong>No LLM explanation</strong>: verify backend env has valid Gemini key/model.</li>
