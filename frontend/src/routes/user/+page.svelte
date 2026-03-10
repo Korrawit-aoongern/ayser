@@ -15,6 +15,7 @@
 	let serviceMessage = '';
 	let userDeleteMessage = '';
 	let error = '';
+	const apiBase = import.meta.env.VITE_API_BASE_URL;
 
 	let userData = {
 		username: '',
@@ -28,7 +29,7 @@
 		loading = true;
 		error = '';
 		try {
-			const res = await fetch('/api/user', {
+			const res = await fetch(`${apiBase}/api/user`, {
 				method: 'GET',
 				credentials: 'include'
 			});
@@ -55,7 +56,7 @@
 		profileMessage = '';
 		error = '';
 		try {
-			const res = await fetch('/api/user', {
+			const res = await fetch(`${apiBase}/api/user`, {
 				method: 'PUT',
 				credentials: 'include',
 				headers: { 'Content-Type': 'application/json' },
@@ -93,7 +94,7 @@
 
 		changingPassword = true;
 		try {
-			const res = await fetch('/api/user/password', {
+			const res = await fetch(`${apiBase}/api/user/password`, {
 				method: 'PUT',
 				credentials: 'include',
 				headers: { 'Content-Type': 'application/json' },
@@ -111,7 +112,7 @@
 			userData.newPassword = '';
 			userData.retypePassword = '';
 
-			await fetch('/api/auth/logout', {
+			await fetch(`${apiBase}/api/auth/logout`, {
 				method: 'POST',
 				credentials: 'include'
 			});
@@ -138,7 +139,7 @@
 		serviceMessage = '';
 		error = '';
 		try {
-			const res = await fetch('/api/services', {
+			const res = await fetch(`${apiBase}/api/services`, {
 				method: 'DELETE',
 				credentials: 'include'
 			});
@@ -169,7 +170,7 @@
 		deletingUser = true;
 		error = '';
 		try {
-			const res = await fetch('/api/user', {
+			const res = await fetch(`${apiBase}/api/user`, {
 				method: 'DELETE',
 				credentials: 'include'
 			});
@@ -179,7 +180,7 @@
 
 			showDeleteUserModal = false;
 			userDeleteMessage = 'User deleted successfully. Redirecting to login...';
-			await fetch('/api/auth/logout', {
+			await fetch(`${apiBase}/api/auth/logout`, {
 				method: 'POST',
 				credentials: 'include'
 			});

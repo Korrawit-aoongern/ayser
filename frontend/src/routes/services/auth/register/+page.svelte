@@ -3,11 +3,12 @@
 	let email = '';
 	let password = '';
 	let error = '';
+	const apiBase = import.meta.env.VITE_API_BASE_URL;
 
 	async function handleRegister(e: Event) {
 		e.preventDefault();
 
-		const res = await fetch('/api/auth/register', {
+		const res = await fetch(`${apiBase}/api/auth/register`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			credentials: 'include',

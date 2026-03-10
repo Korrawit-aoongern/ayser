@@ -12,6 +12,7 @@
 	const advancedMethods = ['None', 'Metrics endpoint'];
 	let loading = false;
 	let error = '';
+	const apiBase = import.meta.env.VITE_API_BASE_URL;
 
 	function toCheckType(method: string) {
 		return method === 'Metrics endpoint' ? 'url_metrics' : 'url';
@@ -52,7 +53,7 @@
 					: '/metrics'
 				).trim() || '/metrics';
 
-			const res = await fetch('/api/services', {
+			const res = await fetch(`${apiBase}/api/services`, {
 				method: 'POST',
 				credentials: 'include',
 				headers: { 'Content-Type': 'application/json' },
