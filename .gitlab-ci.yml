@@ -133,8 +133,9 @@ integration_test:
     - echo "Building ML service image..."
     - export ML_IMAGE="${CI_REGISTRY_IMAGE}/infra-ml:${CI_COMMIT_SHA}"
     - docker build -f infra/Dockerfile.ml -t "$ML_IMAGE" .
+    - echo "ML_IMAGE=$ML_IMAGE" > artifacts/compose.env
     - echo "Starting integration test stack..."
-    - docker compose -f infra/docker-compose.ci.yml up -d
+    - docker compose --env-file artifacts/compose.env -f infra/docker-compose.ci.yml up -d
     - echo "Waiting for backend and ML to be ready..."
     - |
       ready=0
@@ -147,14 +148,14 @@ integration_test:
       done
       if [ "$ready" -ne 1 ]; then
         echo "Services not ready in time"
-        docker compose -f infra/docker-compose.ci.yml logs --no-color || true
+        docker compose --env-file artifacts/compose.env -f infra/docker-compose.ci.yml logs --no-color || true
         exit 1
       fi
     - echo "Running integration tests..."
     - BACKEND_BASE_URL="http://localhost:8000" ML_BASE_URL="http://localhost:8010" pytest -q backend/tests/integration
   after_script:
     - echo "Tearing down integration stack..."
-    - docker compose -f infra/docker-compose.ci.yml down -v
+    - docker compose --env-file artifacts/compose.env -f infra/docker-compose.ci.yml down -v
   rules:
     - if: '$DEPLOY_ONLY == "true"'
       when: never
