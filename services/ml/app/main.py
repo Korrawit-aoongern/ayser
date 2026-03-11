@@ -78,7 +78,7 @@ error_rate 0.18
 
 @app.post("/evaluate")
 async def evaluate(request: EvaluateRequest):
-    min_samples = int(os.getenv("ML_MIN_SAMPLES", "1"))
+    min_samples = int(os.getenv("ML_MIN_SAMPLES", "50"))
 
     if len(request.feature_names) < 2:
         raise HTTPException(status_code=400, detail="at least two features are required")
