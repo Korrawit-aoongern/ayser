@@ -19,6 +19,8 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret")
 JWT_ALGO = "HS256"
 JWT_EXPIRE_MIN = 60 * 24 * 7  # 7 days
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "true").lower() in ("1", "true", "yes")
+COOKIE_SAMESITE = "none" if COOKIE_SECURE else "lax"
 
 # ---- DB ----
 async def get_db():
@@ -112,8 +114,8 @@ async def login(data: LoginReq, response: Response):
         key="access_token",
         value=token,
         httponly=True,
-        secure=False,  # Set to True in production with HTTPS
-        samesite="lax",
+        secure=COOKIE_SECURE,
+        samesite=COOKIE_SAMESITE,
         max_age=7*24*60*60  # 7 days
     )
     
@@ -126,8 +128,8 @@ async def logout(response: Response):
     response.delete_cookie(
         key="access_token",
         httponly=True,
-        secure=False,
-        samesite="lax"
+        secure=COOKIE_SECURE,
+        samesite=COOKIE_SAMESITE
     )
     return {"message": "Logout successful"}
 
