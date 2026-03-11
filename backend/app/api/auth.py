@@ -116,6 +116,7 @@ async def login(data: LoginReq, response: Response):
         httponly=True,
         secure=COOKIE_SECURE,
         samesite=COOKIE_SAMESITE,
+        path="/",
         max_age=7*24*60*60  # 7 days
     )
     
@@ -129,7 +130,8 @@ async def logout(response: Response):
         key="access_token",
         httponly=True,
         secure=COOKIE_SECURE,
-        samesite=COOKIE_SAMESITE
+        samesite=COOKIE_SAMESITE,
+        path="/"
     )
     return {"message": "Logout successful"}
 
