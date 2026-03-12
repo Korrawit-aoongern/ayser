@@ -11,10 +11,10 @@
 
 ## ML
 - ML Role:
-  - Anomaly scoring
-  - Health pattern summarization
+  - Anomaly detection (Isolation Forest)
+  - Rule-based fallback
 - LLM:
-  - ChatGPT (for health explanation and advisory narrative)
+  - Gemini (for health explanation and advisory narrative)
 
 ## Security (Static & Pipeline-Level)
  - SonarQube
@@ -34,7 +34,7 @@
  - RESTful API
  - JSON over HTTPS
 ### Authentication & Authorization
- - Supabase Auth (JWT-based)
+ - JWT (Cookie)
 
 ## Observability
 ### Monitoring
@@ -44,9 +44,7 @@
 
 ## Architecture Style
 - Modular Monolith
-  - Clear separation by domain (auth, services, health, metrics)
-  - Single deployable backend service
-  - Designed to evolve into services if required
+  - Clear separation by domain (Frontend, Backend, ML)
 ## Repository
  - Gitlab
  - Github
@@ -55,13 +53,13 @@
 ## Containerization
 - Docker + Compose
 ## Deployment Target
-    Frontend App = Vercel (candidate)
-    Backend App =   Cloudflare Workers (candidate)
+    Frontend App = Vercel /
+    Backend App =   Render.io /
                     AWS Lambda (alternative)
                     Render.io (alternative)
                     Railway (alternative)
-    ML Service = Backend-triggered batch or async inference
-    Database = Supabase (managed PostgreSQL)
+    ML Service = Render.io /
+    Database = Supabase (managed PostgreSQL) /
 
 ## Non-Functional Considerations
 - Performance
